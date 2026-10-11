@@ -26,7 +26,7 @@
 
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:var(--font-body);
-  padding-inline:clamp(12px,2.5vw,40px);max-width:1800px;margin-inline:auto}
+  padding-inline:16px;max-width:1360px;margin-inline:auto}
 h1,h2,h3,h4{font-family:var(--font-display);text-wrap:balance;margin:0}
 code,.mono{font-family:var(--font-mono)}
 a{color:var(--accent)}
@@ -50,14 +50,20 @@ section.tab[hidden]{display:none}
 
 .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;
   padding:16px}
-.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:28px}
-.grid .card{padding:clamp(12px,2vw,24px);border-radius:14px}
-.grid img{width:100%;max-width:100%;max-height:82vh;object-fit:contain;
-  border-radius:8px;display:block;background:#080d10;margin-inline:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:22px}
+.grid img{max-width:100%;border-radius:6px;display:block;cursor:zoom-in}
 .grid figure{margin:0}
-.grid figcaption{font-size:.92rem;color:var(--fg-muted);margin-top:14px;line-height:1.6;max-width:100ch}
-.grid figcaption strong{font-size:1.02rem}
+.grid figcaption{font-size:.85rem;color:var(--fg-muted);margin-top:10px;line-height:1.5}
 .grid figcaption strong{color:var(--fg);font-weight:600}
+.zoom-hint{font-size:.72rem;color:var(--fg-muted);margin-top:4px;opacity:.75}
+
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.86);display:none;
+  align-items:center;justify-content:center;z-index:50;padding:24px;cursor:zoom-out}
+.lightbox.open{display:flex}
+.lightbox img{max-width:100%;max-height:100%;border-radius:4px;
+  box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.lightbox .lb-close{position:absolute;top:18px;right:22px;color:#fff;font-size:1.6rem;
+  background:none;border:none;cursor:pointer;line-height:1;padding:6px}
 
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
   gap:12px;margin-block:18px}
@@ -128,11 +134,9 @@ ul.notes li{margin-bottom:8px}
 h3.section-h{margin-top:30px;font-size:1.05rem}
 h4.sub-h{margin-top:0;font-size:.95rem}
 
-.model-block{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;padding:clamp(12px,2vw,24px);border-radius:14px}
-.model-block img{width:100%;max-width:100%;max-height:78vh;object-fit:contain;
-  border-radius:8px;display:block;background:#080d10;margin-inline:auto}
-.model-block .model-copy{max-width:100ch}
-@media (max-width:760px){.model-block{grid-template-columns:1fr}.model-block img{max-height:68vh}}
+.model-block{display:grid;grid-template-columns:minmax(380px,620px) 1fr;gap:22px}
+@media (max-width:900px){.model-block{grid-template-columns:1fr}}
+.model-block img{max-width:100%;border-radius:6px;display:block;cursor:zoom-in}
 .model-block .model-name{font-family:var(--font-mono);font-size:.78rem;
   color:var(--fg-muted);text-transform:none;letter-spacing:0;margin-bottom:4px}
 .model-block h4{font-size:1.05rem;margin-bottom:8px}
@@ -155,6 +159,8 @@ details.methodology .inner li{margin-bottom:6px}
   </div>
   <nav class="tabs" role="tablist"></nav>
 </header>
+
+<div class="lightbox" id="lightbox"><button class="lb-close" type="button" aria-label="Cerrar">&times;</button><img id="lightbox-img" alt=""></div>
 
 <section class="tab" data-tab="resumen">
   <h2>Resumen del benchmark</h2>
@@ -278,7 +284,7 @@ details.methodology .inner li{margin-bottom:6px}
 
 <section class="tab" data-tab="metricas" hidden>
   <h2>M&eacute;tricas generales</h2>
-  <p class="lede">Gr&aacute;ficos en formato grande para inspeccionar cada comparaci&oacute;n con claridad.
+  <p class="lede">Cada gr&aacute;fico compara los 8 modelos en una dimensi&oacute;n distinta.
     La lectura breve debajo de cada uno se apoya en las mismas cifras de la pesta&ntilde;a
     Tablas.</p>
   <div class="grid" id="grid-metricas"></div>
@@ -412,7 +418,8 @@ function fillGrid(id, items){
   document.getElementById(id).innerHTML = items.map(([file, cap, note]) => `
     <figure class="card">
       <img src="charts/${file}" alt="${cap}" loading="lazy">
-      <figcaption><strong>${cap}.</strong> ${note || ""}</figcaption>
+      <figcaption><strong>${cap}.</strong> ${note || ""}
+        <div class="zoom-hint">Clic en la imagen para verla en grande.</div></figcaption>
     </figure>`).join("");
 }
 fillGrid("grid-metricas", CHARTS_METRICAS);
@@ -424,8 +431,28 @@ document.getElementById("grid-modelos").innerHTML = CHARTS_MODELOS.map(([file, c
       <div class="model-name">${MODELOS_ORDEN[i]}</div>
       <h4>${cap.replace(/^F1 por clase . /, "")}</h4>
       <p>${note}</p>
+      <div class="zoom-hint">Clic en la imagen para verla en grande.</div>
     </div>
   </div>`).join("");
+
+// --- lightbox: click any chart image to view it full-size ---
+(function setupLightbox(){
+  const lb = document.getElementById("lightbox");
+  const lbImg = document.getElementById("lightbox-img");
+  function openLightbox(src, alt){
+    lbImg.src = src; lbImg.alt = alt || "";
+    lb.classList.add("open");
+  }
+  function closeLightbox(){
+    lb.classList.remove("open"); lbImg.src = "";
+  }
+  document.addEventListener("click", e => {
+    const img = e.target.closest(".grid img, .model-block img");
+    if (img){ openLightbox(img.src, img.alt); return; }
+    if (e.target.closest("#lightbox")) closeLightbox();
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeLightbox(); });
+})();
 
 // --- stats on the Resumen tab ---
 document.getElementById("stat-row").innerHTML = [
@@ -602,7 +629,7 @@ const TABS = [["resumen","Resumen"],["metricas","Métricas"],["modelos","Por mod
   ["tablas","Tablas"],["generaciones","Generaciones"]];
 const tabNav = document.querySelector("nav.tabs");
 tabNav.innerHTML = TABS.map(([id,label],i) =>
-  `<button role="tab" data-tab="${id}" aria-selected="${id==="metricas"}">${label}</button>`).join("");
+  `<button role="tab" data-tab="${id}" aria-selected="${i===0}">${label}</button>`).join("");
 function selectTab(id){
   document.querySelectorAll("section.tab").forEach(s => s.hidden = s.dataset.tab !== id);
   document.querySelectorAll("nav.tabs button").forEach(b =>
@@ -613,7 +640,7 @@ tabNav.addEventListener("click", e => {
   const b = e.target.closest("button[data-tab]");
   if (b) selectTab(b.dataset.tab);
 });
-const startTab = TABS.map(t=>t[0]).includes(location.hash.slice(1)) ? location.hash.slice(1) : "metricas";
+const startTab = TABS.map(t=>t[0]).includes(location.hash.slice(1)) ? location.hash.slice(1) : "resumen";
 selectTab(startTab);
 
 // --- generations browser ---
