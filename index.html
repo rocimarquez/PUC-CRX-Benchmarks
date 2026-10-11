@@ -1,0 +1,665 @@
+<title>PUC-CXR Explorer</title>
+<style>
+/* layout: top tab bar switches sections; charts render in a responsive card
+   grid; the generations tab is a filter bar above a scrollable result table */
+:root{
+  --bg:#eef1f2; --panel:#ffffff; --fg:#10171c; --fg-muted:#51616b;
+  --border:#d7dde0; --accent:#0f7a8c; --accent-fg:#ffffff;
+  --ok:#1f8a53; --warn:#b98900; --bad:#c23b3b;
+  --best-bg:#1f8a53; --second-bg:#b98900;
+  --font-display:'Source Serif 4',Georgia,serif;
+  --font-body:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b1114; --panel:#121a1e; --fg:#e8edf0; --fg-muted:#8fa0a8;
+    --border:#27353c; --accent:#3fb6c9; --accent-fg:#06171a;
+    --ok:#3ecb82; --warn:#e0b23c; --bad:#e5645f; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b1114; --panel:#121a1e; --fg:#e8edf0; --fg-muted:#8fa0a8;
+  --border:#27353c; --accent:#3fb6c9; --accent-fg:#06171a;
+  --ok:#3ecb82; --warn:#e0b23c; --bad:#e5645f; color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);
+  padding-inline:16px;max-width:1180px;margin-inline:auto}
+h1,h2,h3,h4{font-family:var(--font-display);text-wrap:balance;margin:0}
+code,.mono{font-family:var(--font-mono)}
+a{color:var(--accent)}
+
+header.top{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);
+  padding-block:14px 10px;z-index:5;border-bottom:1px solid var(--border)}
+header.top .title-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+  justify-content:space-between}
+header.top h1{font-size:1.5rem;font-weight:600}
+header.top .sub{color:var(--fg-muted);font-size:.85rem}
+nav.tabs{display:flex;gap:4px;margin-top:12px;flex-wrap:wrap}
+nav.tabs button{font-family:var(--font-body);font-size:.85rem;font-weight:600;
+  padding:7px 14px;border-radius:999px;border:1px solid var(--border);
+  background:var(--panel);color:var(--fg-muted);cursor:pointer}
+nav.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-fg);
+  border-color:var(--accent)}
+nav.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+section.tab{padding-block:22px 48px}
+section.tab[hidden]{display:none}
+
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.grid img{max-width:100%;border-radius:6px;display:block}
+.grid figure{margin:0}
+.grid figcaption{font-size:.82rem;color:var(--fg-muted);margin-top:10px;line-height:1.5}
+.grid figcaption strong{color:var(--fg);font-weight:600}
+
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:12px;margin-block:18px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:14px}
+.stat .n{font-family:var(--font-display);font-size:1.6rem;font-variant-numeric:tabular-nums}
+.stat .label{font-size:.78rem;color:var(--fg-muted)}
+
+table.data{width:100%;border-collapse:collapse;font-size:.85rem}
+table.data th,table.data td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border)}
+table.data th{color:var(--fg-muted);font-weight:600;font-size:.75rem;
+  text-transform:uppercase;letter-spacing:.03em}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
+
+table.paper{width:100%;border-collapse:collapse;font-size:.83rem;
+  font-variant-numeric:tabular-nums}
+table.paper caption{text-align:left;font-size:.8rem;color:var(--fg-muted);
+  padding:4px 2px 10px;caption-side:top}
+table.paper th,table.paper td{padding:7px 11px;text-align:right;
+  border-bottom:1px solid var(--border);white-space:nowrap}
+table.paper th:first-child,table.paper td:first-child{text-align:left;
+  position:sticky;left:0;background:var(--panel)}
+table.paper thead th{border-bottom:2px solid var(--fg);color:var(--fg);
+  font-weight:600;font-size:.76rem;text-transform:uppercase;letter-spacing:.02em;
+  vertical-align:bottom}
+table.paper tbody tr:hover td{background:color-mix(in srgb, var(--accent) 7%, transparent)}
+table.paper tbody tr:hover td:first-child{background:color-mix(in srgb, var(--accent) 12%, var(--panel))}
+td.cell-best{font-weight:700;color:var(--ok)}
+td.cell-second{font-weight:600;color:var(--warn)}
+.legend-mark{font-size:.76rem;color:var(--fg-muted);margin-top:10px}
+.legend-mark .cell-best,.legend-mark .cell-second{font-weight:700;padding:0 2px}
+
+table.kv{border-collapse:collapse;font-size:.88rem}
+table.kv td{padding:7px 14px 7px 0;border-bottom:1px solid var(--border);vertical-align:top}
+table.kv td:first-child{color:var(--fg-muted)}
+table.kv td:last-child{font-weight:600;font-variant-numeric:tabular-nums;text-align:right;
+  padding-right:0}
+
+.canned-text{max-width:520px}
+.canned-text .full{display:none}
+.canned-text .more-btn{background:none;border:none;color:var(--accent);
+  font-size:.78rem;cursor:pointer;padding:0;margin-top:3px;font-family:var(--font-body)}
+
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.72rem;
+  font-family:var(--font-mono);font-weight:600}
+.pill.es{background:color-mix(in srgb, var(--ok) 20%, transparent);color:var(--ok)}
+.pill.en{background:color-mix(in srgb, var(--accent) 20%, transparent);color:var(--accent)}
+.pill.mixed,.pill.indet{background:color-mix(in srgb, var(--warn) 22%, transparent);color:var(--warn)}
+.pill.refusal{background:color-mix(in srgb, var(--bad) 20%, transparent);color:var(--bad)}
+.pill.label{background:var(--border);color:var(--fg-muted)}
+
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-block:16px;align-items:center}
+.filters select,.filters input{font-family:var(--font-body);font-size:.85rem;
+  padding:7px 10px;border-radius:7px;border:1px solid var(--border);
+  background:var(--panel);color:var(--fg)}
+.filters input[type="search"]{flex:1;min-width:200px}
+.count{font-size:.8rem;color:var(--fg-muted)}
+
+.gen-row td{vertical-align:top}
+.gen-text{max-width:560px;white-space:pre-wrap;line-height:1.45}
+.gen-meta{font-family:var(--font-mono);font-size:.78rem;color:var(--fg-muted)}
+.empty{padding:30px;text-align:center;color:var(--fg-muted)}
+
+p.lede{max-width:70ch;line-height:1.6;color:var(--fg-muted)}
+p.body-text{max-width:70ch;line-height:1.6;margin-block:12px}
+ul.notes{max-width:70ch;line-height:1.55;padding-left:1.1em}
+ul.notes li{margin-bottom:8px}
+h3.section-h{margin-top:30px;font-size:1.05rem}
+h4.sub-h{margin-top:0;font-size:.95rem}
+
+.model-block{display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:18px}
+@media (max-width:760px){.model-block{grid-template-columns:1fr}}
+.model-block img{max-width:100%;border-radius:6px;display:block}
+.model-block .model-name{font-family:var(--font-mono);font-size:.78rem;
+  color:var(--fg-muted);text-transform:none;letter-spacing:0;margin-bottom:4px}
+.model-block h4{font-size:1.05rem;margin-bottom:8px}
+.model-block p{line-height:1.55;font-size:.9rem;margin:0 0 8px}
+.model-block + .model-block{margin-top:22px;padding-top:22px;border-top:1px solid var(--border)}
+
+details.methodology{margin-block:20px}
+details.methodology summary{cursor:pointer;font-weight:600;font-size:.9rem;
+  padding:4px 0}
+details.methodology .inner{padding-block:10px 4px;max-width:70ch;line-height:1.55;
+  color:var(--fg-muted);font-size:.87rem}
+details.methodology .inner li{margin-bottom:6px}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<header class="top">
+  <div class="title-row">
+    <h1>PUC-CXR Explorer</h1>
+    <span class="sub">8 modelos &middot; AGRG-29 + GRG &middot; espa&ntilde;ol nativo</span>
+  </div>
+  <nav class="tabs" role="tablist"></nav>
+</header>
+
+<section class="tab" data-tab="resumen">
+  <h2>Resumen del benchmark</h2>
+  <p class="lede">Evaluaci&oacute;n en espa&ntilde;ol del dataset PUC-CXR (radiograf&iacute;as de
+    t&oacute;rax de la UC) sobre ocho modelos de visi&oacute;n-lenguaje, en dos tareas:
+    <strong>GRG</strong> (General Report Generation: un informe completo del estudio) y
+    <strong>AGRG-29</strong> (Anatomy-Grounded Report Generation: una descripci&oacute;n
+    por cada una de 29 regiones anat&oacute;micas pedidas por separado). Las convenciones de
+    m&eacute;tricas siguen a <em>CURE</em> (arXiv 2601.15408v2): BLEU-4 y ROUGE-L contra el
+    informe de referencia, F1 cl&iacute;nico micro/macro sobre 46 patolog&iacute;as
+    (CheXpert-ES) con umbral ajustado por modelo, y una clasificaci&oacute;n de
+    comportamiento de la respuesta (espa&ntilde;ol / ingl&eacute;s / mixto / indeterminado /
+    rechazo / colapso a etiqueta). Pista nativa: espa&ntilde;ol de entrada a salida, sin
+    traducir el prompt ni el informe de referencia.</p>
+
+  <div class="stat-row" id="stat-row"></div>
+
+  <h3 class="section-h">Hallazgos principales</h3>
+  <ul class="notes">
+    <li><strong>Ning&uacute;n modelo generaliza bien al espa&ntilde;ol cl&iacute;nico.</strong>
+      El mejor BLEU-4 es 2.15% (qwen3.8-27b) y el mejor ROUGE-L es
+      13.22% (medgemma-27b): ambos muy por debajo de lo t&iacute;pico en
+      informes radiol&oacute;gicos en ingl&eacute;s, lo que sugiere que la mayor&iacute;a de
+      estos modelos fueron entrenados casi exclusivamente con corpus en ingl&eacute;s.</li>
+    <li><strong>qwen3.8-27b domina las m&eacute;tricas cl&iacute;nicas</strong> &mdash; mejor
+      Micro-F1 (36.14%), Macro-F1 (17.36%), precisi&oacute;n
+      (50.91%) y recall (28.02%) &mdash; adem&aacute;s del mejor BLEU-4, sin
+      rechazar ninguna solicitud. Es el modelo m&aacute;s equilibrado de los ocho.</li>
+    <li><strong>eagle2.5-8b rechaza el 100% de las tareas GRG</strong> y, en AGRG-29, rechaza
+      seg&uacute;n el <em>nombre</em> de la regi&oacute;n pedida, no el contenido real de la
+      imagen: rechaza casi siempre regiones como &ldquo;unión cavoauricular&rdquo;
+      (100.0%) o &ldquo;arco aórtico&rdquo; (99.4%), pero
+      responde con normalidad en &ldquo;zona inferior pulmonar derecha&rdquo; (0.0% de
+      rechazo). Es un patr&oacute;n de guardrail activado por palabras clave del prompt, no
+      una decisi&oacute;n cl&iacute;nica.</li>
+    <li><strong>medmo-8b colapsa a etiquetas sueltas</strong> en vez de describir: solo
+      1.93% de sus respuestas son &uacute;nicas, y su respuesta m&aacute;s
+      repetida en AGRG-29 es literalmente la palabra &ldquo;Consolidation&rdquo;
+      (7% de todas sus respuestas en esa tarea). Se comporta como un clasificador de
+      patolog&iacute;as, no como un generador de informes.</li>
+    <li><strong>unirg-cxr-8b hace code-switching en vez de rechazar</strong>: en GRG en
+      espa&ntilde;ol, el 64.9% de sus informes salen en ingl&eacute;s puro y el
+      resto en espa&ntilde;ol/mixto &mdash; nunca se niega, pero tampoco respeta el idioma
+      del prompt.</li>
+    <li><strong>El F1 por patolog&iacute;a es muy desigual incluso en el mejor modelo.</strong>
+      qwen3.8-27b alcanza F1 alto en hallazgos con apariencia visual muy distintiva
+      (Pacemaker 82.4%, Sternotomy 67.2%, Tubes 60.5%) pero F1&nbsp;=&nbsp;0
+      en patolog&iacute;as frecuentes y m&aacute;s sutiles como Pulmonary fibrosis
+      (n=390), Costophrenic angle blunting (n=379) o Lung Mass
+      (n=129): nunca las menciona cuando est&aacute;n presentes.</li>
+  </ul>
+
+  <h3 class="section-h">Qu&eacute; hay en cada pesta&ntilde;a</h3>
+  <ul class="notes">
+    <li><strong>M&eacute;tricas</strong> &mdash; BLEU/ROUGE, F1 cl&iacute;nico micro/macro,
+      mezcla de idioma, tasa de rechazo, longitud de informe, fidelidad de idioma por
+      regi&oacute;n &mdash; cada gr&aacute;fico con su lectura.</li>
+    <li><strong>Por modelo</strong> &mdash; F1 por patolog&iacute;a (umbral ajustado) para
+      cada uno de los 8 modelos, con un perfil de comportamiento propio para cada uno.</li>
+    <li><strong>Tablas</strong> &mdash; las 5 tablas estilo paper como tablas HTML reales
+      (no im&aacute;genes): resultados generales, composici&oacute;n del dataset,
+      comportamiento completo, comparaci&oacute;n por regi&oacute;n anat&oacute;mica,
+      respuestas enlatadas &mdash; con mejor/segundo mejor marcados y an&aacute;lisis debajo
+      de cada una.</li>
+    <li><strong>Generaciones</strong> &mdash; ~160 ejemplos crudos filtrables por modelo,
+      tarea, idioma de respuesta y condici&oacute;n (espa&ntilde;ol / ingl&eacute;s / mixto /
+      rechazo / colapso a etiqueta).</li>
+  </ul>
+
+  <details class="methodology">
+    <summary>M&eacute;todo de evaluaci&oacute;n (resumen)</summary>
+    <div class="inner">
+      <ul>
+        <li><strong>BLEU-4 / ROUGE-L</strong> se calculan contra el informe de referencia
+          completo (hallazgos + impresi&oacute;n) del estudio, tokenizado en espa&ntilde;ol.</li>
+        <li><strong>F1 cl&iacute;nico micro/macro</strong> usa 46 patolog&iacute;as
+          CheXpert-ES extra&iacute;das del ground truth de PUC-CXR; la presencia de cada
+          patolog&iacute;a en el texto generado se detecta por coincidencia de alias
+          cl&iacute;nicos (sin&oacute;nimos en espa&ntilde;ol), con umbral ajustado por
+          modelo para compensar diferencias de verbosidad.</li>
+        <li><strong>% de comportamiento</strong> (espa&ntilde;ol / ingl&eacute;s / mixto /
+          indeterminado / rechazo / plantilla) se asigna por heur&iacute;sticas de
+          detecci&oacute;n de idioma + listas de frases de rechazo conocidas, sobre cada
+          respuesta individual.</li>
+        <li><strong>IoU por regi&oacute;n</strong> solo es evaluable para MAIRA-2 (&uacute;nico
+          modelo con <em>phrase grounding</em> real, bounding boxes expl&iacute;citas);
+          PUC-CXR no tiene anotaci&oacute;n de regiones para el resto, as&iacute; que el AGRG-29
+          de los dem&aacute;s modelos se eval&uacute;a solo por contenido textual, no por
+          localizaci&oacute;n espacial.</li>
+      </ul>
+    </div>
+  </details>
+
+  <h3 class="section-h">Limitaciones a tener presentes</h3>
+  <ul class="notes">
+    <li>PUC-CXR no tiene anotaci&oacute;n por regi&oacute;n &mdash; el GT es el informe
+      completo del estudio. IoU/F1 por regi&oacute;n no son evaluables aqu&iacute; para la
+      mayor&iacute;a de los modelos (s&iacute; para MAIRA-2 v&iacute;a phrase grounding real,
+      que predice un subconjunto de im&aacute;genes, no las 29 regiones en todas).</li>
+    <li>MAIRA-2 es ingl&eacute;s-only; inyectar espa&ntilde;ol en los campos de contexto
+      degrada la salida en vez de traducirla, as&iacute; que sus m&eacute;tricas de BLEU/ROUGE
+      en espa&ntilde;ol son estructuralmente desfavorables y no comparables 1-a-1 con el
+      resto.</li>
+    <li>La detecci&oacute;n de patolog&iacute;as por alias (heur&iacute;stica de texto) no es
+      un NLI entailment real: puede sobre-contar menciones negadas
+      (&ldquo;sin cardiomegalia&rdquo;) si el alias no distingue negaci&oacute;n, y
+      sub-contar par&aacute;frasis no anticipadas. El juez NLI (secci&oacute;n aparte,
+      a&uacute;n corriendo) es la medici&oacute;n m&aacute;s fina de alucinaci&oacute;n.</li>
+    <li>El subconjunto &ldquo;com&uacute;n&rdquo; para m&eacute;tricas cl&iacute;nicas
+      (10 755 estudios) es menor que el total evaluado por comportamiento
+      (20 000), porque requiere que todos los modelos hayan generado una respuesta
+      no vac&iacute;a para ese estudio.</li>
+    <li>Eagle2.5-8b rechaza seg&uacute;n el <em>nombre</em> de la regi&oacute;n, no el
+      contenido de la imagen &mdash; una limitaci&oacute;n del modelo, no del benchmark.</li>
+    <li>MedMO-8b colapsa a etiquetas sueltas (~1.93% de respuestas &uacute;nicas)
+      &mdash; no describe, clasifica.</li>
+    <li>UniRG-CXR hace code-switching en espa&ntilde;ol (~64.9% mezclan o
+      salen en otro idioma en GRG) en vez de rechazar.</li>
+  </ul>
+</section>
+
+<section class="tab" data-tab="metricas" hidden>
+  <h2>M&eacute;tricas generales</h2>
+  <p class="lede">Cada gr&aacute;fico compara los 8 modelos en una dimensi&oacute;n distinta.
+    La lectura breve debajo de cada uno se apoya en las mismas cifras de la pesta&ntilde;a
+    Tablas.</p>
+  <div class="grid" id="grid-metricas"></div>
+</section>
+
+<section class="tab" data-tab="modelos" hidden>
+  <h2>F1 por patolog&iacute;a, por modelo</h2>
+  <p class="lede">Umbral ajustado por modelo, mismo formato que la figura de
+    referencia del paper. Cada bloque incluye un perfil breve del comportamiento
+    de ese modelo espec&iacute;fico, no solo el gr&aacute;fico.</p>
+  <div id="grid-modelos"></div>
+</section>
+
+<section class="tab" data-tab="tablas" hidden>
+  <h2>Tablas estilo paper</h2>
+  <p class="lede">Las mismas 5 tablas del reporte, como HTML real (ordenables visualmente,
+    legibles en modo oscuro) en vez de capturas de pantalla. <span class="legend-mark">
+    <span class="cell-best">verde</span> = mejor valor de la columna &middot;
+    <span class="cell-second">&aacute;mbar</span> = segundo mejor &middot; los empates se
+    marcan todos igual.</span></p>
+  <div id="tablas-wrap"></div>
+</section>
+
+<section class="tab" data-tab="generaciones" hidden>
+  <h2>Generaciones de ejemplo</h2>
+  <p class="lede">~160 respuestas crudas de muestra (de las ~17M generaciones totales del
+    benchmark), filtrables para inspeccionar casos concretos de cada condici&oacute;n de
+    comportamiento.</p>
+  <div class="filters">
+    <select id="f-model"><option value="">Modelo (todos)</option></select>
+    <select id="f-task"><option value="">Tarea (todas)</option></select>
+    <select id="f-cond"><option value="">Condici&oacute;n (todas)</option></select>
+    <input type="search" id="f-search" placeholder="Buscar en regi&oacute;n o texto&hellip;">
+    <span class="count" id="gen-count"></span>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th style="width:110px">Modelo</th><th style="width:70px">Tarea</th>
+        <th style="width:140px">Regi&oacute;n</th><th style="width:90px">Condici&oacute;n</th>
+        <th>Texto generado</th></tr></thead>
+      <tbody id="gen-body"></tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+const DATA = {"tabla_resultados": {"columns": ["BLEU-4", "ROUGE-L", "% Rechazo", "Micro-F1", "Macro-F1", "Micro-P", "Micro-R"], "rows": [{"model": "eagle2.5-8b", "cells": [{"v": 0.0, "mark": null}, {"v": 0.0, "mark": null}, {"v": 100.0, "mark": null}, {"v": 0.02, "mark": null}, {"v": 0.05, "mark": null}, {"v": 1.62, "mark": null}, {"v": 0.01, "mark": null}]}, {"model": "lingshu-32b", "cells": [{"v": 0.0, "mark": null}, {"v": 0.02, "mark": null}, {"v": 0.0, "mark": "best"}, {"v": 2.32, "mark": null}, {"v": 1.08, "mark": null}, {"v": 28.02, "mark": null}, {"v": 1.21, "mark": null}]}, {"model": "lingshu-7b", "cells": [{"v": 0.32, "mark": null}, {"v": 3.5, "mark": null}, {"v": 0.0, "mark": "best"}, {"v": 4.9, "mark": null}, {"v": 3.1, "mark": null}, {"v": 27.13, "mark": null}, {"v": 2.7, "mark": null}]}, {"model": "maira-2", "cells": [{"v": 0.11, "mark": null}, {"v": 7.11, "mark": null}, {"v": 0.0, "mark": "best"}, {"v": 13.58, "mark": null}, {"v": 6.44, "mark": null}, {"v": 40.97, "mark": null}, {"v": 8.14, "mark": null}]}, {"model": "medgemma-27b", "cells": [{"v": 1.63, "mark": "second"}, {"v": 13.22, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 30.57, "mark": "second"}, {"v": 13.28, "mark": "second"}, {"v": 45.03, "mark": null}, {"v": 23.14, "mark": "second"}]}, {"model": "medmo-8b", "cells": [{"v": 0.03, "mark": null}, {"v": 9.65, "mark": null}, {"v": 0.0, "mark": "best"}, {"v": 3.19, "mark": null}, {"v": 0.75, "mark": null}, {"v": 7.33, "mark": null}, {"v": 2.04, "mark": null}]}, {"model": "qwen3.8-27b", "cells": [{"v": 2.15, "mark": "best"}, {"v": 13.01, "mark": "second"}, {"v": 0.0, "mark": "best"}, {"v": 36.14, "mark": "best"}, {"v": 17.36, "mark": "best"}, {"v": 50.91, "mark": "best"}, {"v": 28.02, "mark": "best"}]}, {"model": "unirg-cxr-8b", "cells": [{"v": 0.0, "mark": null}, {"v": 0.06, "mark": null}, {"v": 0.02, "mark": "second"}, {"v": 9.84, "mark": null}, {"v": 5.54, "mark": null}, {"v": 48.88, "mark": "second"}, {"v": 5.47, "mark": null}]}]}, "headline_resultados": {"bleu4": {"best_model": "qwen3.8-27b", "best_value": 2.15}, "rougeL": {"best_model": "medgemma-27b", "best_value": 13.22}, "refusal_pct": {"best_model": "lingshu-32b", "best_value": 0.0}, "micro_f1": {"best_model": "qwen3.8-27b", "best_value": 36.14}, "macro_f1": {"best_model": "qwen3.8-27b", "best_value": 17.36}, "micro_P": {"best_model": "qwen3.8-27b", "best_value": 50.91}, "micro_R": {"best_model": "qwen3.8-27b", "best_value": 28.02}}, "tabla_composicion": {"rows": [["Estudios evaluados (tarea GRG, informe completo)", "20 000"], ["Estudios evaluados (tarea AGRG-29, por región)", "20 000"], ["Subconjunto común para métricas (BLEU/ROUGE/F1 clínico)", "10 755"], ["Regiones anatómicas distintas (AGRG-29)", "29"], ["Patologías evaluadas (CheXpert-ES)", "46"], ["Hallazgos promedio por informe (ground truth)", "3.68"], ["Modelos evaluados", "8"], ["Modelos con tarea AGRG-29", "7"], ["Idiomas de prompt usados", "Español (todos) · Inglés (solo unirg-cxr-8b)"]]}, "tabla_comportamiento": {"columns": ["% Vacío", "% Rechazo", "% Español", "% Inglés", "% Mixto", "% Indeterm.", "% Plantilla", "Palabras (media)", "% Único"], "rows": [{"model": "eagle2.5-8b", "cells": [{"v": 0.0, "mark": "best"}, {"v": 100.0, "mark": "second"}, {"v": 99.7, "mark": null}, {"v": 0.0, "mark": null}, {"v": 0.3, "mark": null}, {"v": 0.0, "mark": "best"}, {"v": 43.8, "mark": null}, {"v": 82.1, "mark": null}, {"v": 3.1, "mark": null}]}, {"model": "lingshu-32b", "cells": [{"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 0.1, "mark": null}, {"v": 99.9, "mark": null}, {"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 55.2, "mark": null}, {"v": 39.6, "mark": null}]}, {"model": "lingshu-7b", "cells": [{"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 32.0, "mark": null}, {"v": 67.1, "mark": null}, {"v": 0.1, "mark": null}, {"v": 0.8, "mark": "second"}, {"v": 0.0, "mark": "second"}, {"v": 119.0, "mark": null}, {"v": 40.5, "mark": null}]}, {"model": "maira-2", "cells": [{"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 9.2, "mark": null}, {"v": 8.1, "mark": null}, {"v": 66.8, "mark": null}, {"v": 15.9, "mark": null}, {"v": 0.0, "mark": "best"}, {"v": 48.4, "mark": null}, {"v": 75.5, "mark": "best"}]}, {"model": "medgemma-27b", "cells": [{"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 100.0, "mark": "best"}, {"v": 0.0, "mark": null}, {"v": 0.0, "mark": "second"}, {"v": 0.0, "mark": "best"}, {"v": 100.0, "mark": null}, {"v": 396.3, "mark": null}, {"v": 3.8, "mark": null}]}, {"model": "medmo-8b", "cells": [{"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 97.0, "mark": null}, {"v": 3.0, "mark": null}, {"v": 0.0, "mark": "second"}, {"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 18.0, "mark": null}, {"v": 0.4, "mark": null}]}, {"model": "qwen3.8-27b", "cells": [{"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 100.0, "mark": "second"}, {"v": 0.0, "mark": null}, {"v": 0.0, "mark": null}, {"v": 0.0, "mark": "best"}, {"v": 100.0, "mark": null}, {"v": 296.3, "mark": null}, {"v": 4.4, "mark": null}]}, {"model": "unirg-cxr-8b", "cells": [{"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": "best"}, {"v": 0.0, "mark": null}, {"v": 64.9, "mark": null}, {"v": 0.0, "mark": "second"}, {"v": 27.8, "mark": null}, {"v": 100.0, "mark": null}, {"v": 22.9, "mark": null}, {"v": 60.5, "mark": "second"}]}]}, "tabla_region": {"model_a": "qwen3.8-27b", "model_b": "unirg-cxr-8b", "rows": [{"region": "abdomen", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 0.6, "unique_a": 15.9, "unique_b": 47.0}, {"region": "arco aórtico", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 16.8, "unique_a": 8.8, "unique_b": 60.7}, {"region": "aurícula derecha", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 30.3, "unique_a": 6.4, "unique_b": 64.2}, {"region": "carina", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 80.3, "unique_a": 7.8, "unique_b": 71.7}, {"region": "clavícula derecha", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 44.0, "unique_a": 8.7, "unique_b": 51.5}, {"region": "clavícula izquierda", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 38.0, "unique_a": 8.4, "unique_b": 34.1}, {"region": "columna vertebral", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 84.5, "unique_a": 7.1, "unique_b": 61.2}, {"region": "estructuras hiliares derechas", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 35.9, "unique_a": 10.6, "unique_b": 78.1}, {"region": "estructuras hiliares izquierdas", "refusal_a": 0.0, "refusal_b": 0.4, "es_a": 100.0, "es_b": 34.5, "unique_a": 7.4, "unique_b": 77.9}, {"region": "hemidiafragma derecho", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 36.4, "unique_a": 2.8, "unique_b": 56.2}, {"region": "hemidiafragma izquierdo", "refusal_a": 0.0, "refusal_b": 0.1, "es_a": 100.0, "es_b": 50.1, "unique_a": 3.2, "unique_b": 69.5}, {"region": "mediastino", "refusal_a": 0.0, "refusal_b": 0.1, "es_a": 100.0, "es_b": 6.5, "unique_a": 4.8, "unique_b": 49.7}, {"region": "mediastino superior", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 21.2, "unique_a": 5.7, "unique_b": 72.3}, {"region": "pulmón derecho", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 53.9, "unique_a": 12.3, "unique_b": 62.3}, {"region": "pulmón izquierdo", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 34.2, "unique_a": 12.2, "unique_b": 58.3}, {"region": "silueta cardíaca", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 36.5, "unique_a": 5.4, "unique_b": 52.8}, {"region": "tráquea", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 31.9, "unique_a": 10.1, "unique_b": 47.8}, {"region": "unión cavoauricular", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 53.5, "unique_a": 7.4, "unique_b": 72.6}, {"region": "vena cava superior", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 71.9, "unique_a": 10.9, "unique_b": 70.0}, {"region": "zona apical derecha", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 33.3, "unique_a": 16.8, "unique_b": 71.3}, {"region": "zona apical izquierda", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 43.6, "unique_a": 13.8, "unique_b": 70.3}, {"region": "zona inferior pulmonar derecha", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 37.3, "unique_a": 12.3, "unique_b": 74.5}, {"region": "zona inferior pulmonar izquierda", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 34.1, "unique_a": 6.1, "unique_b": 77.1}, {"region": "zona media pulmonar derecha", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 20.3, "unique_a": 10.0, "unique_b": 70.7}, {"region": "zona media pulmonar izquierda", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 27.1, "unique_a": 5.2, "unique_b": 73.6}, {"region": "zona superior pulmonar derecha", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 37.7, "unique_a": 12.2, "unique_b": 64.0}, {"region": "zona superior pulmonar izquierda", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 99.8, "es_b": 59.6, "unique_a": 7.1, "unique_b": 66.6}, {"region": "ángulo costofrénico derecho", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 38.1, "unique_a": 5.5, "unique_b": 59.0}, {"region": "ángulo costofrénico izquierdo", "refusal_a": 0.0, "refusal_b": 0.0, "es_a": 100.0, "es_b": 53.6, "unique_a": 4.3, "unique_b": 55.5}]}, "tabla_enlatadas": {"rows": [{"model": "eagle2.5-8b", "task": "agrg", "share": 22.0, "text": "Lo siento, no puedo ayudar con la localización o descripción de partes del cuerpo en imágenes médica"}, {"model": "eagle2.5-8b", "task": "grg", "share": 10.5, "text": "Lo siento, no puedo analizar imágenes médicas. Sin embargo, puedo proporcionarte información general"}, {"model": "lingshu-32b", "task": "agrg", "share": 1.5, "text": "En la zona superior pulmonar izquierda, se observa una opacidad difusa que podría indicar la presenc"}, {"model": "lingshu-32b", "task": "grg", "share": 8.6, "text": "Findings: The lungs are clear. There is no focal consolidation, pleural effusion, or pneumothorax. T"}, {"model": "lingshu-7b", "task": "agrg", "share": 1.0, "text": "En la zona superior del pulmón derecho se observa un área de opacidad difusa, lo que sugiere la pres"}, {"model": "lingshu-7b", "task": "grg", "share": 23.4, "text": "Findings: The heart is normal in size. The mediastinum is unremarkable. The lungs are clear. Impress"}, {"model": "maira-2", "task": "grg", "share": 9.2, "text": "<obj> No significant findings.</obj>"}, {"model": "medgemma-27b", "task": "agrg", "share": 1.2, "text": "Aquí tienes la localización y descripción de la silueta cardíaca en la radiografía de tórax proporci"}, {"model": "medgemma-27b", "task": "grg", "share": 17.1, "text": "Aquí tienes un informe basado en la radiografía de tórax proporcionada:  **Informe de Radiografía de"}, {"model": "medmo-8b", "task": "agrg", "share": 7.0, "text": "Consolidation"}, {"model": "medmo-8b", "task": "grg", "share": 77.0, "text": "La radiografía de tórax de pie muestra un patrón de vidrio esmerilado en ambos campos pulmonares."}, {"model": "qwen3.8-27b", "task": "agrg", "share": 1.5, "text": "Basado en la radiografía de tórax proporcionada, aquí está la localización y descripción de las estr"}, {"model": "qwen3.8-27b", "task": "grg", "share": 12.1, "text": "Basado en la imagen de radiografía de tórax proporcionada, aquí tienes un informe radiológico fundam"}, {"model": "unirg-cxr-8b", "task": "agrg", "share": 1.1, "text": "Localiza y describe abdomen: None."}, {"model": "unirg-cxr-8b", "task": "grg", "share": 20.0, "text": "**Impression: No acute cardiopulmonary process."}]}, "eagle_top_refusal_regions": [{"region": "unión cavoauricular", "refusal_pct": 100.0}, {"region": "arco aórtico", "refusal_pct": 99.4}, {"region": "abdomen", "refusal_pct": 98.7}], "eagle_bottom_refusal_regions": [{"region": "zona superior pulmonar derecha", "refusal_pct": 0.1}, {"region": "zona inferior pulmonar izquierda", "refusal_pct": 0.1}, {"region": "zona inferior pulmonar derecha", "refusal_pct": 0.0}], "medmo_unique_pct": 1.93, "unirg_lang_mix": {"es": 0.0, "mixed": 0.0, "en": 64.9}, "heatmap_f1_highlights": {"top": [{"label": "Pacemaker", "f1": 82.4, "n_pos": 689}, {"label": "Sternotomy", "f1": 67.2, "n_pos": 851}, {"label": "Tubes", "f1": 60.5, "n_pos": 3320}], "zero_despite_common": [{"label": "Pulmonary fibrosis", "n_pos": 390}, {"label": "Costophrenic angle blunting", "n_pos": 379}, {"label": "Lung Mass", "n_pos": 129}]}};
+const SAMPLES = [{"cond": "refusal", "model": "eagle2.5-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "abdomen", "text": "Lo siento, no puedo ayudar con la localización o descripción de partes del cuerpo en imágenes médicas."}, {"cond": "refusal", "model": "eagle2.5-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "pulmón izquierdo", "text": "Lo siento, no puedo ayudar con la localización o descripción de partes del cuerpo en imágenes médicas."}, {"cond": "refusal", "model": "eagle2.5-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "arco aórtico", "text": "Lo siento, no puedo localizar o describir partes de una imagen. Sin embargo, puedo proporcionarte información general sobre el arco aórtico si la necesitas."}, {"cond": "es", "model": "eagle2.5-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "silueta cardíaca", "text": "La silueta cardíaca en la radiografía de tórax se aprecia en la parte central de la imagen. Presenta una forma ligeramente ovalada y se encuentra sobre el esternón y entre las dos mitades del tórax. En esta radiografía, el contorno del corazón parece estar dentro de los límites normales, aunque su apariencia puede variar según la posición del paciente y la técnica radiológica."}, {"cond": "es", "model": "eagle2.5-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "ángulo costofrénico izquierdo", "text": "El ángulo costofrénico izquierdo se encuentra en la parte inferior izquierda del tórax, formado por la confluencia de la costilla inferior y la línea media del tórax. En una radiografía normal, este ángulo debe ser visible y formar un ángulo agudo. En la imagen proporcionada, el ángulo costofrénico izquierdo parece estar claramente visible y no presenta alteraciones obvias."}, {"cond": "es", "model": "eagle2.5-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "ángulo costofrénico derecho", "text": "El ángulo costofrénico derecho se encuentra en la parte superior derecha del tórax, formado por la convergencia de la línea del costado y la línea frénica. En una radiografía normal, se observa como una pequeña curva hacia abajo. En esta imagen, el ángulo costofrénico derecho parece estar claramente visible y no presenta alteraciones obvias."}, {"cond": "refusal", "model": "eagle2.5-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "", "text": "Lo siento, no puedo analizar imágenes médicas. Sin embargo, puedo proporcionarte información general sobre cómo se realizan los informes de radiología. Un informe de radiología de tórax típico incluye la siguiente información:\n\n1. **Antecedentes Clínicos**:\n   - Información sobre la historia clínica del paciente.\n   - Razones para la realización de la radiografía (por ejemplo, síntomas respiratori"}, {"cond": "refusal", "model": "eagle2.5-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "", "text": "Lo siento, no puedo analizar imágenes médicas. Sin embargo, puedo proporcionarte información general sobre cómo se estructuran los informes de radiología. Un informe de radiología debe incluir:\n\n1. **Información del paciente:**\n   - Nombre\n   - Edad\n   - Género\n   - Número de historial clínico\n   - Fecha de la radiografía\n\n2. **Descripción técnica:**\n   - Tipo de radiografía\n   - Posición del paci"}, {"cond": "refusal", "model": "eagle2.5-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "", "text": "Lo siento, no puedo analizar imágenes médicas. Sin embargo, puedo ayudarte con información general sobre radiografías torácicas o con cualquier otra consulta. ¡Por favor, pregunta algo más!"}, {"cond": "es", "model": "lingshu-32b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "abdomen", "text": "En la radiografía de tórax se observa la parte superior del abdomen, pero no se aprecian detalles específicos del mismo."}, {"cond": "es", "model": "lingshu-32b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "silueta cardíaca", "text": "La silueta cardíaca en la radiografía de tórax es normal. No se observan signos de cardiomegalia ni alteraciones en la forma del corazón."}, {"cond": "es", "model": "lingshu-32b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "ángulo costofrénico izquierdo", "text": "El ángulo costofrénico izquierdo en la radiografía de tórax parece estar bien definido y sin alteraciones. No se observan signos de blunting o pérdida de la angulación, lo que indica la ausencia de líquido pleural en ese área."}, {"cond": "en", "model": "lingshu-32b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.195095", "region": "abdomen", "text": "The bowel is dilated.  There is no free air."}, {"cond": "en", "model": "lingshu-32b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.385708", "region": "abdomen", "text": "The lung volumes are low, with bibasilar atelectasis, more pronounced on the left.  No pleural effusion or pneumothorax is identified.  The aorta is tortuous and calcified.  The heart size is likely top normal."}, {"cond": "en", "model": "lingshu-32b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.385708", "region": "mediastino", "text": "The mediastinum appears widened, which could be due to the projection. The aorta is elongated."}, {"cond": "indet", "model": "lingshu-32b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.331189", "region": "mediastino superior", "text": "El mediastino superior no presenta alteraciones."}, {"cond": "indet", "model": "lingshu-32b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.296929", "region": "mediastino", "text": "El mediastino no presenta ampliación."}, {"cond": "indet", "model": "lingshu-32b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.307234", "region": "mediastino", "text": "Mediastino ampliado por cardiomegalia."}, {"cond": "label", "model": "lingshu-32b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.430596", "region": "abdomen", "text": "No se visualiza."}, {"cond": "en", "model": "lingshu-32b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "", "text": "Findings: The heart is normal in size. The mediastinum is unremarkable. The lungs are clear. Impression: No acute disease."}, {"cond": "en", "model": "lingshu-32b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "", "text": "Findings: The image shows a chest X-ray of a patient. The lungs appear to have a diffuse, hazy opacity, indicating the presence of pulmonary edema or fluid accumulation in the lungs. The heart appears to be enlarged, suggesting the possibility of heart failure. The mediastinal structures appear to be within normal limits. There is no evidence of any focal consolidation, pleural effusion, or pneumo"}, {"cond": "en", "model": "lingshu-32b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "", "text": "Findings: The image shows a chest X-ray of a patient. The X-ray reveals the presence of a right-sided chest tube, which appears to be in a suboptimal position. The lung fields show some areas of increased opacity, suggesting the presence of fluid or other pathological changes. The heart and mediastinal structures appear to be within normal limits. Overall, the image indicates the need for further "}, {"cond": "es", "model": "lingshu-32b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.81838", "region": "", "text": "La imagen muestra una radiografía de tórax que revela la presencia de un dispositivo de estimulación cardíaca implantado en el tórax del paciente. El dispositivo, conocido como un marcapasos o un desfibrilador implantable, se encuentra ubicado en el lado izquierdo del tórax, con los electrodos que se extienden hacia el interior del corazón. La radiografía también muestra la estructura pulmonar y e"}, {"cond": "es", "model": "lingshu-32b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457209", "region": "", "text": "En la radiografía de tórax en proyección posteroanterior, se observa una opacidad bien delimitada en la región parahilar izquierda, que se proyecta sobre el segmento apical del lóbulo inferior izquierdo. Esta opacidad es de densidad homogénea y no muestra signos de calcificación. No se aprecian alteraciones en el resto de los parénquimas pulmonares, que presentan una ventilación adecuada. El media"}, {"cond": "es", "model": "lingshu-32b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.302542", "region": "", "text": "En la radiografía de tórax se observa una opacidad difusa en el lóbulo medio del pulmón derecho, con bordes mal definidos y una distribución irregular. Esta opacidad se asocia con una atelectasia del segmento medio del lóbulo medio del pulmón derecho, lo que indica una posible obstrucción o colapso parcial del segmento afectado. Además, se observa una opacidad difusa en el lóbulo inferior del pulm"}, {"cond": "en", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "abdomen", "text": "The image provided is a chest X-ray, which primarily focuses on the thoracic region, including the lungs, heart, and upper abdomen. The abdomen is visible at the lower part of the image, showing the diaphragm and the upper abdominal organs. The diaphragm appears as a dome-shaped structure separating the thoracic cavity from the abdominal cavity. The upper abdomen shows the outlines of the liver an"}, {"cond": "en", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "carina", "text": "The carina is the point where the trachea divides into the left and right main bronchi. It is located at the level of the 4th thoracic vertebra. In this chest X-ray, the carina appears as a distinct, slightly widened area where the trachea bifurcates. The surrounding lung fields are clear, and there are no signs of masses or significant abnormalities in the mediastinal region. The heart size is wi"}, {"cond": "en", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "vena cava superior", "text": "The superior vena cava is a large vein that carries deoxygenated blood from the upper half of the body to the heart. It is located on the right side of the chest, running vertically along the right side of the spine. In the provided chest X-ray, the superior vena cava appears as a prominent, dark, vertical structure on the right side of the image, just above the heart. It is clearly visible and ca"}, {"cond": "es", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "silueta cardíaca", "text": "La silueta cardíaca se encuentra en el centro de la imagen, rodeada por los pulmones. Es una estructura triangular claramente visible en el centro de la radiografía."}, {"cond": "es", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "ángulo costofrénico izquierdo", "text": "El ángulo costofrénico izquierdo en la imagen es normal, sin signos de pleuritis o hinchazón pleural."}, {"cond": "es", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "ángulo costofrénico derecho", "text": "El ángulo costofrénico derecho en la imagen se encuentra normal, sin evidencia de pleuritis o fluido pleural."}, {"cond": "indet", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.385708", "region": "vena cava superior", "text": "No se visualiza vena cava superior."}, {"cond": "indet", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.84158", "region": "abdomen", "text": "The abdomen appears within normal limits."}, {"cond": "indet", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.515163", "region": "abdomen", "text": "The abdomen appears within normal limits."}, {"cond": "refusal", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.331189", "region": "abdomen", "text": "The image provided is a chest X-ray, not an abdominal X-ray. Therefore, I am unable to provide a description of the abdomen based on this image."}, {"cond": "refusal", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.334353", "region": "abdomen", "text": "The image provided is a chest X-ray, not an abdominal X-ray. Therefore, I am unable to provide a description of the abdomen based on this image."}, {"cond": "label", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.331189", "region": "pulmón derecho", "text": "No disponible."}, {"cond": "label", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.331189", "region": "unión cavoauricular", "text": "No se aprecia."}, {"cond": "label", "model": "lingshu-7b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.331189", "region": "zona apical izquierda", "text": "No disponible."}, {"cond": "en", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "", "text": "Chest X-ray of a 20-year-old man with COVID-19. The chest X-ray shows bilateral peripheral ground-glass opacities, more prominent in the lower lung fields."}, {"cond": "en", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "", "text": "Findings: The heart is normal in size. The mediastinum is unremarkable. The lungs are grossly clear. Impression: No acute disease."}, {"cond": "en", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "", "text": "The chest X-ray shows a right-sided pleural effusion, which is a collection of fluid in the pleural space between the lung and the chest wall. The effusion appears as a hazy, opaque area in the right lung field, indicating the presence of excess fluid. The image also shows the presence of medical devices, such as a central venous catheter and an endotracheal tube, which are commonly used in the ma"}, {"cond": "es", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.385708", "region": "", "text": "Hallazgos: Examen de rutina. Apariencia normal de la caja torácica y los huesos. Apariencia normal de la aorta. Apariencia normal de los pulmones. No hay signos de infiltrado, pleuritis, hidropneumoperitónio o aire en las vías digestivas. No hay signos de dilatación gástrica. No hay signos de lesión abdominal. No hay signos de lesión abdominal. Impresiones: Apariencia normal de la caja torácica y "}, {"cond": "es", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.537299", "region": "", "text": "Caso clínico 1. Paciente de 67 años, con antecedentes de hipertensión arterial, diabetes mellitus y obesidad, que ingresa por síntomas de disnea y dolor torácico. En la exploración física se evidenció disnea de esfuerzo, auscultándose crepitantes en ambos lados. En la radiografía de tórax se observó infiltrado periférico en ambos pulmones, con predominio en el lado izquierdo. Se realizó una tomogr"}, {"cond": "es", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.38005", "region": "", "text": "En la imagen se observa un tórax con cardiomegalia marcada, lo que indica un aumento del tamaño del corazón. Además, se aprecia una opacidad difusa en ambos pulmones, lo que sugiere la presencia de edema pulmonar. Estos hallazgos son consistentes con un cuadro clínico de insuficiencia cardíaca congestiva, donde el corazón no puede bombear eficientemente el sangre, lo que lleva a la acumulación de "}, {"cond": "indet", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.408399", "region": "", "text": "Ensayo: Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. "}, {"cond": "indet", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.262", "region": "", "text": "Ensayo: Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. "}, {"cond": "indet", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.233402", "region": "", "text": "Ensayo: Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. Ensayo. "}, {"cond": "mixed", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.514198", "region": "", "text": "Hallazgos: En el tórax: Aparato respiratorio inalterado. En el tórax: Aparato circulatorio inalterado. En el tórax: Aparato digestivo inalterado. En el tórax: Aparato urinario inalterado. En el tórax: Aparato reproductor inalterado. En el tórax: Aparato endocrino inalterado. En el tórax: Aparato locomotor inalterado. En el tórax: Aparato sensorial inalterado. En el tórax: Aparato nervioso inaltera"}, {"cond": "mixed", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.530100", "region": "", "text": "Hallazgos: En el tórax: Aparato respiratorio inalterado. En el tórax: Aparato circulatorio inalterado. En el tórax: Aparato digestivo inalterado. En el tórax: Aparato urinario inalterado. En el tórax: Aparato reproductor inalterado. En el tórax: Aparato endocrino inalterado. En el tórax: Aparato locomotor inalterado. En el tórax: Aparato sensorial inalterado. En el tórax: Aparato nervioso inaltera"}, {"cond": "mixed", "model": "lingshu-7b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.482846", "region": "", "text": "Hallazgos: En el tórax: Aparato respiratorio inalterado. En el tórax: Aparato circulatorio inalterado. En el tórax: Aparato digestivo inalterado. En el tórax: Aparato urinario inalterado. En el tórax: Aparato reproductor inalterado. En el tórax: Aparato endocrino inalterado. En el tórax: Aparato locomotor inalterado. En el tórax: Aparato sensorial inalterado. En el tórax: Aparato nervioso inaltera"}, {"cond": "indet", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "", "text": "<obj> Cardiac/pericardial silhouette is within normal limits.</obj><obj> Lungs appear clear.</obj><obj> Pleural spaces appear clear.</obj>"}, {"cond": "indet", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.401907", "region": "", "text": "<obj> No displaced left rib fracture.</obj><obj> No expansile or destructive process.</obj><obj> Left clavicle intact.</obj><obj> Left humerus intact.</obj><obj> Heart size normal.</obj><obj> No left pneumothorax.</obj><obj> No left effusion.</obj>"}, {"cond": "indet", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.307474", "region": "", "text": "<obj> No significant findings.</obj>"}, {"cond": "mixed", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "", "text": "<obj> Ng tube with tip overlying the stomach.<box><x48><y77><x70><y98></box></obj><obj> Heart size is normal.</obj><obj> Right perihilar atelectasis is present.<box><x16><y33><x48><y69></box></obj><obj> No pneumothorax is seen.</obj>"}, {"cond": "mixed", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.563690", "region": "", "text": "<obj> The heart size is normal.</obj><obj> There is a patchy infiltrate in the left lower lung.<box><x60><y50><x98><y83></box></obj><obj> The right lung is clear.</obj><obj> There is no pleural effusion.</obj><obj> There is no pneumothorax.</obj><obj> The patient is status post median sternotomy.<box><x42><y22><x63><y72></box></obj>"}, {"cond": "mixed", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.386089", "region": "", "text": "<obj> Endotracheal tube 4.3 cm above the carina.<box><x48><y0><x64><y35></box></obj><obj> Ng tube overlies the stomach.<box><x47><y0><x70><y98></box></obj><obj> Right-sided vascular catheter overlies the superior vena cava/right atrial junction.<box><x25><y12><x54><y60></box></obj><obj> Left lower lobe infiltrate is noted.<box><x55><y50><x91><y83></box></obj><obj> Small left effusion is noted.</ob"}, {"cond": "en", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.382329", "region": "", "text": "<obj> The lungs are clear.</obj><obj> The heart is normal in size.</obj><obj> The vessels are normal in size.</obj><obj> No pleural effusion is seen.</obj><obj> No pneumothorax is seen.</obj><obj> The bones are intact.</obj>"}, {"cond": "en", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.383064", "region": "", "text": "<obj> The lungs are clear.</obj><obj> The heart is normal in size.</obj><obj> The mediastinum is normal in size.</obj><obj> No pleural abnormalities are seen.</obj><obj> No significant skeletal abnormalities are identified.</obj>"}, {"cond": "en", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.240565", "region": "", "text": "<obj> The lungs are clear.</obj><obj> The cardiomediastinal contour is normal.</obj><obj> There is no significant pleural effusion.</obj>"}, {"cond": "es", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.626", "region": "", "text": "<obj> Pacemaker.<box><x32><y17><x90><y78></box></obj><obj> Increased cardiothoracic index.<box><x29><y36><x83><y77></box></obj><obj> Bilateral pleural effusion.<box><x2><y44><x34><y73></box><box><x59><y46><x89><y73></box></obj><obj> Congestive hila.<box><x24><y35><x39><y61></box><box><x58><y31><x74><y52></box></obj>"}, {"cond": "es", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.522720", "region": "", "text": "<obj> Reservoir projected over the right hemithorax.<box><x18><y19><x45><y44></box></obj><obj> No significant radiological alterations.</obj>"}, {"cond": "es", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.56738", "region": "", "text": "<obj> Cardiomegaly.<box><x30><y36><x84><y73></box></obj><obj> Pacemaker.<box><x66><y18><x89><y43></box><box><x36><y7><x61><y69></box></obj><obj> Median sternotomy cerclage.<box><x44><y19><x58><y61></box></obj><obj> Metallic heart valve.<box><x51><y55><x62><y62></box></obj><obj> Bilateral pleural effusion.<box><x12><y44><x34><y65></box><box><x65><y53><x87><y73></box></obj><obj> Bilateral perihilar "}, {"cond": "indet", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "", "text": "<obj> No significant pulmonary parenchymal abnormalities.</obj><obj> No effusions.</obj><obj> Vascular structures are normal.</obj><obj> Pulmonary vasculature is unremarkable.</obj><obj> Cardiac silhouette is normal.</obj><obj> No cardiac silhouette abnormality.</obj><obj> No cardiomegaly.</obj><obj> Mediastinum is normal.</obj><obj> No visible mass.</obj><obj> No adenopathy.</obj><obj> Bones are "}, {"cond": "indet", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.401907", "region": "", "text": "<obj> No significant pulmonary parenchymal abnormalities.</obj><obj> No effusions.</obj><obj> Unremarkable pulmonary vasculature.</obj><obj> No cardiac silhouette abnormality.</obj><obj> No cardiomegaly.</obj><obj> No visible mass or adenopathy.</obj><obj> No fracture.</obj><obj> No visible bony lesion.</obj>"}, {"cond": "indet", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.307474", "region": "", "text": "<obj> No infiltrates.</obj><obj> No condensations.</obj><obj> No effusions.</obj><obj> Cardiomediastinal silhouette within normal limits.</obj>"}, {"cond": "es", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "", "text": "<obj> Ng tube con tip terminado en el fundus.<box><x45><y0><x67><y99></box></obj><obj> Aortic elongation.<box><x45><y23><x69><y80></box></obj><obj> Elevation de diaphragm.<box><x7><y67><x44><y91></box></obj><obj> No pulmonary consolidation.</obj><obj> No pleural effusion.</obj><obj> No pneumothorax.</obj>"}, {"cond": "es", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.485132", "region": "", "text": "<obj> No significant pulmonary parenchymal abnormalities.</obj><obj> No effusions.</obj><obj> Vascular congestion.<box><x17><y22><x92><y80></box></obj><obj> Mild cardiomegaly.<box><x34><y44><x94><y86></box></obj><obj> No significant pleural effusion.</obj><obj> No pneumothorax.</obj><obj> Mediastinum structures:</obj><obj> No visible mass or adenopathy.</obj><obj> Bones:</obj><obj> No fracture or "}, {"cond": "es", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.293993", "region": "", "text": "<obj> Cardiac silhouette dextrocardia.<box><x34><y23><x75><y75></box></obj><obj> Bicameral pacemaker.<box><x66><y28><x88><y48></box></obj><obj> Aorta elongada.<box><x39><y23><x64><y76></box></obj><obj> No pulmonary infiltrates.</obj><obj> No condensaciones.</obj><obj> No pleural effusion.</obj><obj> No pneumothorax.</obj><obj> Degenerative changes en axiales.<box><x38><y23><x61><y84></box></obj>"}, {"cond": "mixed", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.382329", "region": "", "text": "<obj> No infiltrates.</obj><obj> No consolidations.</obj><obj> No pleural effusion.</obj><obj> No pneumothorax.</obj><obj> Cardiomediastinal silhouette is within normal limits.</obj><obj> Displacement of the right humeral head.<box><x0><y0><x14><y20></box></obj>"}, {"cond": "mixed", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.563690", "region": "", "text": "<obj> Midline sternotomy sutures.<box><x44><y23><x61><y70></box></obj><obj> Coronary artery stents.<box><x50><y50><x67><y70></box></obj><obj> Coronary artery atherosclerosis.<box><x38><y33><x72><y78></box></obj><obj> Cardiomediastinal silhouette is normal.</obj><obj> Pulmonary vasculature is normal.</obj><obj> Left basilar atelectasis.<box><x60><y50><x95><y82></box></obj><obj> No pleural effusion."}, {"cond": "mixed", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.386089", "region": "", "text": "<obj> Endotracheal tube en position infradiaphragmatic, apical segment of the right clavicle.<box><x46><y0><x58><y28></box></obj><obj> Nasogastric tube con unchnged en position parahilar.<box><x43><y0><x67><y77></box></obj><obj> Central venous catheter con unchnged en position.<box><x35><y11><x54><y60></box></obj><obj> Increased density en el area de la frayges de la right hilum.<box><x25><y34><x5"}, {"cond": "en", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.14686", "region": "", "text": "<obj> No significant change in left pleural effusion.</obj><obj> No significant change in left pleural thickening.</obj><obj> No significant change in left basal atelectasis.</obj><obj> Pleural drainage tube has been removed.</obj><obj> Right lung is clear.</obj><obj> Cardiac silhouette is unremarkable.</obj><obj> Mediastinal silhouette is unremarkable.</obj>"}, {"cond": "en", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.108591", "region": "", "text": "<obj> No radiographic evidence of tb in the chest.</obj>"}, {"cond": "en", "model": "maira-2", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.228172", "region": "", "text": "<obj> No infiltrates.</obj><obj> No condensations.</obj><obj> No pneumothorax.</obj><obj> No fracture.</obj><obj> No alteration of the cardiomediastinal silhouette.</obj>"}, {"cond": "es", "model": "medgemma-27b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "abdomen", "text": "Aquí está la localización y descripción del abdomen en la imagen:\n\n**Localización:**\n\nEl abdomen es la región del cuerpo situada entre el tórax (pecho) y la pelvis. En la imagen, se encuentra en la parte central inferior del cuerpo, debajo del tórax y por encima de la pelvis.\n\n**Descripción:**\n\n*   **Forma:** El abdomen en la imagen tiene una forma ligeramente cónica, más ancha en la parte superio"}, {"cond": "es", "model": "medgemma-27b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "silueta cardíaca", "text": "Aquí tienes la localización y descripción de la silueta cardíaca en la radiografía de tórax proporcionada:\n\n**Localización:**\n\nLa silueta cardíaca se encuentra en el centro del tórax, ligeramente desplazada hacia la izquierda. Ocupa el espacio entre los pulmones, justo encima del diafragma.\n\n**Descripción:**\n\n*   **Forma:** Tiene una forma cónica o triangular invertida, con la punta dirigida hacia"}, {"cond": "es", "model": "medgemma-27b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "ángulo costofrénico izquierdo", "text": "De acuerdo con la imagen proporcionada, el ángulo costofrénico izquierdo es la región donde las costillas inferiores (aproximadamente la 9ª, 10ª y 11ª) se encuentran con el diafragma en el lado izquierdo del tórax.\n\n**Descripción:**\n\n*   **Ubicación:** Es el ángulo agudo formado por la intersección de la superficie inferior del parénquima pulmonar (pleura visceral) y la pared torácica lateral (ple"}, {"cond": "mixed", "model": "medgemma-27b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.66273", "region": "zona media pulmonar derecha", "text": "De acuerdo con la imagen proporcionada, la zona media pulmonar derecha se encuentra en la región central del pulmón derecho, específicamente entre la zona apical (superior) y la zona basal (inferior).\n\n**Descripción:**\n\n*   **Ubicación:** Se sitúa aproximadamente a la altura del 4to y 5to costillas.\n*   **Estructuras visibles:** En esta zona, se pueden observar:\n    *   El bronquio principal derec"}, {"cond": "mixed", "model": "medgemma-27b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.260372", "region": "zona media pulmonar derecha", "text": "De acuerdo con la imagen proporcionada, la zona media pulmonar derecha se encuentra en la región central del pulmón derecho, específicamente entre la zona apical (superior) y la zona basal (inferior).\n\n**Descripción:**\n\n*   **Ubicación:** Se sitúa aproximadamente a la altura del 4to y 5to costillas posteriores.\n*   **Apariencia:** En la radiografía, se observa como un área de densidad pulmonar que"}, {"cond": "es", "model": "medgemma-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "", "text": "Aquí tienes un reporte fundamentado basado en la imagen de la radiografía de tórax proporcionada:\n\n**Reporte de Radiografía de Tórax**\n\n**Datos del Paciente:** (No proporcionados en la imagen, se asume que están disponibles en el expediente clínico)\n\n**Fecha del Estudio:** (No proporcionada en la imagen, se asume que está disponible en el expediente clínico)\n\n**Indicación Clínica:** (No proporcion"}, {"cond": "es", "model": "medgemma-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "", "text": "Aquí tienes un informe fundamentado basado en la imagen proporcionada:\n\n**Informe Radiológico**\n\n**Paciente:** Desconocido\n**Fecha del Estudio:** Desconocida\n**Modalidad:** Radiografía de Tórax (AP)\n\n**Hallazgos:**\n\n1.  **Tubo de Gastrostomía:** Se observa un tubo de gastrostomía (sonda nasogástrica o similar) en su lugar, con la punta proyectada en la región del estómago. El tubo parece estar cor"}, {"cond": "es", "model": "medgemma-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "", "text": "Aquí tienes un informe fundamentado basado en la imagen proporcionada:\n\n**Informe sobre la Radiografía Torácica**\n\n**Identificación:** Radiografía de tórax posteroanterior (PA) con un portal de acceso venoso central (línea central) en el lado derecho.\n\n**Hallazgos Principales:**\n\n1.  **Línea Central Venosa:** Se observa una línea central de inserción subclavicular derecha. La punta de la línea par"}, {"cond": "mixed", "model": "medgemma-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.515235", "region": "", "text": "Aquí tienes un informe fundamentado basado en la radiografía de tórax proporcionada:\n\n**Informe de Radiografía de Tórax**\n\n**Datos del Paciente:** (No proporcionados, asumo que son conocidos por el solicitante)\n\n**Fecha del Estudio:** (No proporcionada, asumo que es reciente)\n\n**Indicación Clínica:** (No proporcionada, pero la imagen sugiere una evaluación de rutina o seguimiento)\n\n**Técnica:** Ra"}, {"cond": "mixed", "model": "medgemma-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.305051", "region": "", "text": "Aquí tienes un reporte fundamentado sobre la imagen proporcionada:\n\n**Reporte de la Imagen: \"La Noche de los Muertos Vivientes\" (The Night of the Living Dead)**\n\n**Descripción General:**\n\nLa imagen es un póster promocional del icónico filme de terror de 1968, \"La Noche de los Muertos Vivientes\" (Night of the Living Dead), dirigido por George A. Romero. El póster presenta una composición dramática "}, {"cond": "mixed", "model": "medgemma-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.78144", "region": "", "text": "Aquí tienes un informe fundamentado basado en la imagen proporcionada:\n\n**Informe Radiológico**\n\n**Paciente:** Desconocido\n**Fecha del Estudio:** Desconocida\n**Tipo de Estudio:** Radiografía de Tórax (Posteroanterior - PA)\n\n**Hallazgos:**\n\n1.  **Opacidades Parenquimatosas:** Se observan dos opacidades bien definidas en el parénquima pulmonar.\n    *   **Opacidad Derecha:** Localizada en el lóbulo i"}, {"cond": "es", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "abdomen", "text": "El abdomen es un órgano que se encuentra en el pecho."}, {"cond": "es", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "silueta cardíaca", "text": "La silueta cardíaca es normal"}, {"cond": "es", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "ángulo costofrénico izquierdo", "text": "El ángulo costofrénico izquierdo es agudo"}, {"cond": "label", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "ángulo costofrénico derecho", "text": "No se observa"}, {"cond": "label", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "zona media pulmonar izquierda", "text": "Bronquio"}, {"cond": "label", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "zona media pulmonar derecha", "text": "Bronquio"}, {"cond": "en", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "carina", "text": "The carina is the point at which the trachea divides into the right and left main bronchi."}, {"cond": "en", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "carina", "text": "The carina is the point where the trachea divides into the right and left main bronchi."}, {"cond": "en", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "carina", "text": "The carina is the point where the trachea divides into the right and left main bronchi."}, {"cond": "indet", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.442346", "region": "mediastino superior", "text": "El mediastino superior contiene: 1) Tronco braquiocefálico, 2) Arteria subclavia izquierda, 3) Arteria subclavia derecha, 4) Vena subclavia izquierda, 5) Vena subclavia derecha, 6) Vena braquiocefálica izquierda, 7) Vena braquiocefálica derecha, 8) Vena braquiocefálica, 9) Esófago, 10) Tráquea, 11) Nervio vago, 12) Nervio frénico, 13) Nervio simpático, 14) Nervio simpático, 15) Nervio simpático, 1"}, {"cond": "indet", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.2130", "region": "mediastino superior", "text": "El mediastino superior contiene: 1) Tronco braquiocefálico, 2) Arteria subclavia izquierda, 3) Arteria pulmonar izquierda, 4) Vena pulmonar izquierda, 5) Vena subclavia izquierda, 6) Esófago, 7) Nervio vago, 8) Nervio frénico, 9) Nervio simpático, 10) Ganglios simpáticos, 11) Ganglios paravertebrales, 12) Ganglios cervicales, 13) Ganglios cardíacos, 14) Ganglios bronquiales, 15) Ganglios pulmonare"}, {"cond": "indet", "model": "medmo-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.38005", "region": "mediastino superior", "text": "El mediastino superior contiene: 1) Tronco braquiocefálico, 2) Arteria subclavia izquierda, 3) Arteria subclavia derecha, 4) Vena subclavia izquierda, 5) Vena subclavia derecha, 6) Vena braquiocefálica izquierda, 7) Vena braquiocefálica derecha, 8) Vena braquiocefálica, 9) Esófago, 10) Tráquea, 11) Nervio vago, 12) Nervio frénico, 13) Nervio simpático, 14) Nervio simpático, 15) Nervio simpático, 1"}, {"cond": "es", "model": "medmo-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "", "text": "La radiografía de tórax de pie muestra un pulmón derecho con un patrón reticular difuso. El pulmón izquierdo es normal."}, {"cond": "es", "model": "medmo-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "", "text": "La radiografía de tórax de pie muestra un patrón de vidrio esmerilado en ambos campos pulmonares."}, {"cond": "es", "model": "medmo-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "", "text": "La radiografía de tórax de pie muestra un patrón de vidrio esmerilado en ambos campos pulmonares."}, {"cond": "en", "model": "medmo-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.195095", "region": "", "text": "The patient is a 65-year-old man with a history of hypertension and diabetes mellitus. He has had a cough for 1 month. Chest radiography shows a large mass in the right upper lobe."}, {"cond": "en", "model": "medmo-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.386089", "region": "", "text": "The patient is a 60-year-old man with a history of hypertension and diabetes mellitus. He has had a cough for 1 month. Chest radiography shows a large mass in the right upper lobe."}, {"cond": "en", "model": "medmo-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.22990", "region": "", "text": "The patient is a 65-year-old man with a history of hypertension and diabetes mellitus. He has had a cough for 1 month. Chest radiography shows a large mass in the right upper lobe."}, {"cond": "mixed", "model": "medmo-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.162197", "region": "", "text": "A 55-year-old man with a history of hypertension and diabetes mellitus type 2, who was referred to the emergency department with a 2-day history of chest pain. The patient was afebrile, with a blood pressure of 130/80 mm Hg, heart rate of 80/min, respiratory rate of 18/min, and oxygen saturation of 98% on room air. The patient was in no acute distress. The physical examination was unremarkable. Th"}, {"cond": "es", "model": "qwen3.8-27b", "task": "agrg", "lang": "es", "id": null, "region": "abdomen", "text": "Basado en la imagen de rayos X proporcionada, aquí tienes la localización y descripción de la porción visible del abdomen:\n\n**Localización:**\nEl abdomen se encuentra en la parte inferior de la imagen, debajo de las cúpulas diafragmáticas (las estructuras curvas y blancas que separan el tórax del abdomen). En esta radiografía de tórax, solo se visualiza la porción superior o \"epigastrio\" del abdome"}, {"cond": "es", "model": "qwen3.8-27b", "task": "agrg", "lang": "es", "id": null, "region": "silueta cardíaca", "text": "Basado en la radiografía de tórax proporcionada, aquí está la localización y descripción de la silueta cardíaca:\n\n**Localización:**\nLa silueta cardíaca se encuentra en el **mediastino medio e inferior**, ocupando principalmente la región retroesternal y proyectándose hacia el hemitórax izquierdo. Está delimitada por:\n*   **Superiormente:** Por la aorta y los grandes vasos (aunque en esta vista fro"}, {"cond": "es", "model": "qwen3.8-27b", "task": "agrg", "lang": "es", "id": null, "region": "ángulo costofrénico izquierdo", "text": "Basado en la imagen de la radiografía de tórax proporcionada, aquí tienes la localización y descripción del ángulo costofrénico izquierdo:\n\n**Localización:**\nEl ángulo costofrénico izquierdo se encuentra en la parte inferior externa del campo pulmonar izquierdo. Específicamente, es la zona donde el borde inferior de la pleura parietal (asociada a las costillas inferiores) se une con la pleura diaf"}, {"cond": "mixed", "model": "qwen3.8-27b", "task": "agrg", "lang": "es", "id": null, "region": "zona superior pulmonar izquierda", "text": "Basado en la imagen de radiografía de tórax proporcionada, aquí tienes la localización y descripción de la zona superior pulmonar izquierda:\n\n**Localización:**\nEn una radiografía de tórax estándar (vista PA o AP), la \"izquierda pulmonar\" del paciente corresponde al **lado derecho de la imagen** para el observador. Por lo tanto, la zona superior pulmonar izquierda se encuentra en la parte superior "}, {"cond": "es", "model": "qwen3.8-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "", "text": "Claro, aquí tienes un **informe radiológico fundamentado** basado en la imagen de tórax proporcionada:\n\n---\n\n**INFORME DE RADIOGRAFÍA DE TÓRAX (PORTÁTIL)**\n\n**Paciente:** [Nombre del paciente – no visible en imagen]  \n**Fecha de estudio:** [Fecha – no visible en imagen]  \n**Técnica:** Radiografía portátil de tórax en posición AP (anteroposterior), probablemente en decúbito o semi-sentado (por ser "}, {"cond": "es", "model": "qwen3.8-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "", "text": "Basado en la imagen radiográfica proporcionada, aquí tienes un informe fundamentado siguiendo el formato estándar de radiología:\n\n**INFORME DE RADIOGRAFÍA DE TÓRAX**\n\n**Técnica:** Radiografía simple de tórax en posición anteroposterior (AP) de pie o semi-sentado (indicado por la etiqueta \"PORTATIL\").\n\n**Hallazgos:**\n\n*   **Dispositivos:** Se observa un tubo orogástrico (sonda nasogástrica/orogástr"}, {"cond": "es", "model": "qwen3.8-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "", "text": "Basado en la imagen radiográfica proporcionada, aquí tienes un informe fundamentado siguiendo el formato estándar de radiología:\n\n**INFORME DE RADIOGRAFÍA DE TÓRAX (PORTÁTIL)**\n\n**Hallazgos:**\n\n*   **Dispositivos y Material:**\n    *   Se observa un **marcapasos de dos cámaras** (o posible resorte de oclusión, aunque la morfología sugiere más fuertemente un generador de pulso con electrodos) con el"}, {"cond": "mixed", "model": "qwen3.8-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.14127", "region": "", "text": "Basado en la imagen de radiografía de tórax proporcionada, aquí tienes un informe radiológico fundamentado:\n\n**INFORME DE RADIOGRAFÍA DE TÓRAX**\n\n**Técnica:** Radiografía simple de tórax en proyección anteroposterior (AP), probablemente en decúbito o semi-sentado (judging by the magnification of the heart and the position of the diaphragm).\n\n**Hallazgos:**\n\n1.  **Dispositivos:**\n    *   Se observa"}, {"cond": "mixed", "model": "qwen3.8-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.336734", "region": "", "text": "Basado en la imagen radiográfica proporcionada, aquí tienes un informe fundamentado siguiendo el formato estándar de radiología:\n\n**INFORME DE RADIOGRAFÍA DE TÓRAX**\n\n**Técnica:** Radiografía portátil (AP) de tórax.\n**Posición:** Paciente en decúbito o semi-sentado (sugerido por la etiqueta \"PORTATIL\" y la presencia de dispositivos).\n\n**Hallazgos:**\n\n1.  **Dispositivos y Soporte Vital:**\n    *   S"}, {"cond": "mixed", "model": "qwen3.8-27b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.291918", "region": "", "text": "Basado en la imagen radiográfica proporcionada, aquí tienes un informe fundamentado siguiendo el formato estándar de radiología:\n\n**INFORME DE RADIOGRAFÍA DE TÓRAX**\n\n**Técnica:** Radiografía portátil (AP) de tórax.\n**Posición:** Paciente en decúbito o semi-sentado (sugerido por la etiqueta \"PORTATIL\" y la presencia de dispositivos de soporte vital).\n\n**Hallazgos:**\n\n1.  **Dispositivos y Material "}, {"cond": "en", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "abdomen", "text": "The lungs are clear. The cardiomediastinal silhouette is normal. There is no pleural effusion or pneumothorax. The abdomen is unremarkable."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "cardiac silhouette", "text": "The cardiac silhouette is normal in size. The cardiomediastinal silhouette is within normal limits. The lungs are clear. There is no focal consolidation. There is no pleural effusion or pneumothorax. Impression: No acute cardiopulmonary process."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "left costophrenic angle", "text": "The left costophrenic angle is normal."}, {"cond": "label", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.442346", "region": "abdomen", "text": "None."}, {"cond": "label", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.94759", "region": "abdomen", "text": "None."}, {"cond": "label", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.38005", "region": "abdomen", "text": "None."}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.386089", "region": "right lung", "text": "Right lung is clear."}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.2130", "region": "upper mediastinum", "text": "upper mediastinum is widened."}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.195746", "region": "upper mediastinum", "text": "upper mediastinum is within normal limits."}, {"cond": "refusal", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.34542", "region": "upper mediastinum", "text": "In the lateral view, there is a 2.4 cm long vertically oriented opacity projecting anterior to the lower trachea, probably in the midline. I cannot identify a corresponding abnormality on the frontal view. The lungs are otherwise clear. There is no pleural effusion or evidence of central adenopathy. Heart size is normal. Impression: 1. Vertical opacity in the midline visible only on the lateral vi"}, {"cond": "refusal", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.314672", "region": "upper mediastinum", "text": "In the lateral view, there is a 2.4 cm long vertically oriented opacity projecting anterior to the lower trachea, probably in the midline. I cannot identify a corresponding abnormality on the frontal view. It could be a mediastinal cyst or other mediastinal lesion. Chest CT scanning would be definitive in characterizing this. Lungs are clear. Heart size is normal. There is no pleural effusion."}, {"cond": "refusal", "model": "unirg-cxr-8b", "task": "agrg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.389105", "region": "upper mediastinum", "text": "In the lateral view, there is a 2.4 cm long vertically oriented opacity projecting anterior to the lower trachea, probably in the midline. I cannot identify a corresponding abnormality on the frontal view. It could be a mediastinal cyst or other benign lesion. I recommend comparison to prior chest radiographs to confirm stability. Lungs are clear. Cardiomediastinal and hilar silhouettes and pleura"}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "abdomen", "text": "Localiza y describe abdomen: No acute abdominal abnormality."}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "ángulo costofrénico derecho", "text": "Localiza y describe ángulo costofrénico derecho."}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "tráquea", "text": "trachea: 5.3 cm above the carina."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "silueta cardíaca", "text": "Localiza y describe silueta cardíaca: The cardiac silhouette is normal."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "arco aórtico", "text": "Arc aorta is located in the left upper quadrant. It is normal."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "zona media pulmonar izquierda", "text": "In the left mid lung zone, there is a 1 cm nodular opacity. Otherwise, the lungs are clear. The cardiomediastinal silhouette is normal. There are no pleural effusions or pneumothorax."}, {"cond": "es", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "ángulo costofrénico izquierdo", "text": "Para localizar el ángulo costofrénico izquierdo, trazar una línea vertical desde el cuello hasta el abdomen. Luego, trazar una línea horizontal desde el costal lateral hasta el centro del pecho. El punto donde se intersectan estas dos líneas es el ángulo costofrénico izquierdo."}, {"cond": "es", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "pulmón izquierdo", "text": "El pulmón izquierdo se localiza en la mitad del hemithorax. Es homogénemente transparente. No se ve ninguna infiltrate."}, {"cond": "es", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "pulmón derecho", "text": "El pulmón derecho ocupa la mitad inferior derecha del hemithorax. Es homogéneamente opacificado, sin evidence de consolidation."}, {"cond": "mixed", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "mediastino", "text": "Mediastino se localiza central, between the clavicular heads. It is normal in size. The lungs are clear. There is no pneumothorax or pleural effusion."}, {"cond": "mixed", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "estructuras hiliares derechas", "text": "Para localizar y describir las estructuras hila derechas, se utilizará un esquema de radiographia de tórax. Análisis: 1. Localización de estructuras: A. Estructura: Hila, right. B. Localización: Right hilum is located in the midline, projecting over the right lung. 2. Abnormal kinking of the trachea. 3. Otherwise, no significant abnormalities are noted."}, {"cond": "mixed", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "clavícula izquierda", "text": "Clavícula izquierda se localiza en the left upper chest. No evident fracture."}, {"cond": "label", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "tráquea", "text": "Localiza y describe tráquea: Trachea normal."}, {"cond": "label", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "pulmón derecho", "text": "Localiza y describe pulmón derecho:"}, {"cond": "label", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "mediastino", "text": "Localiza y describe mediastino: Mediastinal drain."}, {"cond": "refusal", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.472446", "region": "estructuras hiliares izquierdas", "text": "Localiza y describe estructuras hilaire izquierdas.:   Hila I cannot visualize on the frontal view, probably normal.  Left hilum  is normal.  Left mediastinal border is normal.   No pleural effusion.  No lung consolidation."}, {"cond": "refusal", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.328846", "region": "estructuras hiliares izquierdas", "text": "Localiza y describe estructuras hilaire izquierdas.:   Hila I cannot visualize on the frontal view, probably normal.  Left hilum  is normal.  Left lung is clear.  Right lung is clear.  No pleural  effusions.  No pneumothorax.  Degenerative changes in the thoracic spine.   The cardiac silhouette is normal."}, {"cond": "refusal", "model": "unirg-cxr-8b", "task": "agrg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.134858", "region": "mediastino", "text": "Mediastino es un varón.  Lo siento, no puedo ayudarle."}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "grg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "", "text": "Grounded Report: No acute cardiopulmonary process."}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "grg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.22990", "region": "", "text": "**Grounded Report:**\n\n**1.  STABLE POSITIONING OF AICD.     **2.  STABLE CARDIOMEGALY.     **3.  SMALL BILATERAL PLEURAL EFFUSIONS.      **4.  PERSISTENT RETROCARDIAC OPACITY.      **5.  SMALL RIGHT PLEURAL EFFUSION."}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "grg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.244769", "region": "", "text": "Grounded Report: No acute cardiopulmonary process."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "grg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "", "text": "Grounded Report: In comparison with the study of _, there has been placement of a Dobbhoff tube with the tip in the stomach. There is elevation of the left hemidiaphragm. The lungs are clear."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "grg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "", "text": "Grounded Report: In comparison with the study of _, there is an endotracheal tube in place with its tip approximately 6 cm above the carina. Right chest tube is seen and there is little change in the appearance of the right pleural effusion. No evidence of pneumothorax. Small left pleural effusion is seen."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "grg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.195095", "region": "", "text": "Grounded Report: Frontal and lateral views of the chest demonstrate low lung volumes. There is a small right pleural effusion. There is opacity in the right lower lobe, which may represent atelectasis or consolidation. The aorta is tortuous and calcified. There is no pneumothorax. There is gaseous distention of the colon."}, {"cond": "refusal", "model": "unirg-cxr-8b", "task": "grg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.264458", "region": "", "text": "Grounded Report: AP chest compared to _: Severe pulmonary fibrosis is present. There is no way to exclude concurrent pulmonary edema, but the diffuse infiltrative pulmonary abnormality is so severe that I cannot distinguish edema from pulmonary fibrosis. Heart size is enlarged. There is no pneumothorax. Small right pleural effusion is presumed."}, {"cond": "refusal", "model": "unirg-cxr-8b", "task": "grg", "lang": "en", "id": "1.3.51.0.1.1.146.155.249.152.971261.251217", "region": "", "text": "Grounded Report: AP chest compared to _: Severe infiltrative pulmonary abnormality has worsened since _, probably pulmonary edema, but there is so asymmetric involvement in the right lung I cannot exclude concurrent pneumonia. Lung volumes are low, and there is persistent elevation of the right hemidiaphragm. Small pleural effusions are presumed. Heart size is difficult to assess. No pneumothorax."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.452459", "region": "", "text": "**REPORT**  \n**1.  NO EVIDENCE OF CONSOLIDATION, PLEURAL EFFUSION, OR PNEUMOTHORAX.   2.  OSSEOUS STRUCTURES ARE WITHIN NORMAL LIMITS."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.457130", "region": "", "text": "**REPORT**  \n**AP PORTABLE CHEST WITHOUT COMPARISONS DEMONSTRATES A FEEDING TUBE IN PLACE WITH TIP PROJECTING IN THE STOMACH.  MILD CARDIOMEGALY WITH A TORTUOUS, CALCIFIED THORACIC AORTA.  LUNGS ARE ESSENTIALLY CLEAR.  NO CONSOLIDATION, EDEMA, OR PLEURAL EFFUSIONS."}, {"cond": "en", "model": "unirg-cxr-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.87608", "region": "", "text": "**REPORT**  \n**CHEST:  08/06/2006  1809 HOURS.   INTERVAL PLACEMENT OF ENDOTRACHEAL TUBE WITH TIP 5.5 CM ABOVE THE  CARINA.  RIGHT CHEST TUBE IS SEEN.  THERE IS A SMALL RIGHT PLEURAL  EFFUSION.  SMALL LEFT PLEURAL EFFUSION.  VOLUME LOSS IN THE RIGHT LUNG.     CHEST:  8/6/2006  0348 HOURS.   ENDOTRACHEAL TUBE IS UNCHANGED.  REMAINING LINES AND TUBES ARE STABLE.   INCREASED OPACITY IN THE RIGHT LUNG"}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.459388", "region": "", "text": "**Impression: No acute cardiopulmonary process."}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.94759", "region": "", "text": "**Impression: No acute cardiopulmonary process."}, {"cond": "indet", "model": "unirg-cxr-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.2130", "region": "", "text": "**REPORT**  \n**PULMONARY EDEMA AND BILATERAL PLEURAL EFFUSIONS.  LEFT GREATER THAN RIGHT.  REDEMONSTRATION OF FEEDING TUBE.  NO SIGNIFICANT INTERVAL CHANGE."}, {"cond": "label", "model": "unirg-cxr-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.352518", "region": "", "text": "**EXTENSIVE METASTATIC DISEASE.**"}, {"cond": "label", "model": "unirg-cxr-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.282919", "region": "", "text": "**REPORT**  \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _"}, {"cond": "label", "model": "unirg-cxr-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.548721", "region": "", "text": "**REPORT**  \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _"}, {"cond": "mixed", "model": "unirg-cxr-8b", "task": "grg", "lang": "es", "id": "1.3.51.0.1.1.146.155.249.152.971261.88146", "region": "", "text": "**Right pleural effusion.**\n\n**una gran effusion de right.  Nasogastric tube with the tip in the stomach. The left lung is clear."}];
+
+const CHARTS_METRICAS = [
+  ["fig1_bleu_rouge_por_modelo.png","BLEU-4 y ROUGE-L por modelo",
+   "qwen3.8-27b tiene el mejor BLEU-4 y medgemma-27b el mejor ROUGE-L, pero ambos valores " +
+   "son bajos en términos absolutos (ninguno supera ~13 puntos ROUGE-L): hay overlap " +
+   "léxico real con el informe de referencia, pero está lejos de una coincidencia " +
+   "fuerte."],
+  ["fig2_micro_macro_f1_por_modelo.png","F1 clínico micro/macro por modelo",
+   "qwen3.8-27b lidera ambas métricas con margen claro. La brecha entre micro-F1 y " +
+   "macro-F1 en todos los modelos (micro casi siempre mayor) indica que el desempeño se " +
+   "concentra en pocas patologías frecuentes y cae en las más raras."],
+  ["fig3_f1_heatmap_top20_patologias.png","F1 por patología (top 20) × modelo",
+   "El patrón es consistente entre modelos: hallazgos con apariencia visual muy " +
+   "distintiva (dispositivos como marcapasos, esternotomía, tubos) tienen F1 alto; " +
+   "hallazgos parenquimatosos sutiles (fibrosis, nodularidad) tienden a F1 bajo o cero."],
+  ["fig4_idioma_respuesta_por_modelo.png","Mezcla de idioma de la respuesta por modelo",
+   "medgemma-27b y qwen3.8-27b responden consistentemente en español. lingshu-32b y " +
+   "lingshu-7b responden casi siempre en inglés aunque el prompt sea en español. " +
+   "maira-2 y unirg-cxr-8b mezclan idiomas con frecuencia."],
+  ["fig5_tasa_rechazo_por_modelo.png","Tasa de rechazo por modelo",
+   "eagle2.5-8b es el único con rechazo masivo (100% en GRG). El resto de los modelos " +
+   "prácticamente no rechaza (0% o cercano), incluyendo modelos con desempeño " +
+   "clínico muy bajo — es decir, cuando fallan, lo hacen generando texto " +
+   "irrelevante o genérico, no negándose."],
+  ["fig11_heatmap_espanol_por_region_todos_modelos.png",
+   "Fidelidad de idioma por región anatómica (AGRG-29)",
+   "qwen3.8-27b mantiene ~100% español en las 29 regiones sin excepción. " +
+   "unirg-cxr-8b varía fuertemente por región: desde ~0.6% español en " +
+   "‘abdomen’ hasta ~84% en ‘columna vertebral’, sugiriendo que el " +
+   "idioma de salida depende del vocabulario asociado a cada región en sus datos de " +
+   "entrenamiento, no de una política de idioma consistente."],
+  ["fig12_longitud_respuesta_por_modelo.png","Longitud del informe: media y mediana",
+   "medgemma-27b y qwen3.8-27b producen los informes más largos (cientos de palabras), " +
+   "mientras medmo-8b y unirg-cxr-8b producen respuestas muy cortas (grados de detalle muy " +
+   "distintos, independientes de qué tan correctas sean)."],
+];
+const MODELOS_ORDEN = ["eagle2.5-8b","lingshu-32b","lingshu-7b","maira-2",
+  "medgemma-27b","medmo-8b","qwen3.8-27b","unirg-cxr-8b"];
+const PERFILES = {
+  "eagle2.5-8b": "Rechaza el 100% de GRG y una fracción alta de AGRG-29 según el " +
+    "nombre de la región pedida (p.ej. casi siempre en ‘unión cavoauricular’ " +
+    "o ‘arco aórtico’, casi nunca en zonas pulmonares). F1 clínico " +
+    "prácticamente nulo (Micro-F1 0.02%) porque casi no hay texto clínico que " +
+    "evaluar.",
+  "lingshu-32b": "No rechaza, pero responde en inglés el ~99.9% de las veces aunque el " +
+    "prompt sea en español. F1 clínico modesto (Micro-F1 2.3%); su respuesta GRG " +
+    "más repetida es un informe genérico de ‘pulmones limpios’ en inglés " +
+    "(8.6% de sus informes GRG).",
+  "lingshu-7b": "Similar a su versión 32B pero algo más mixto en idioma (32% español " +
+    "en GRG). Tiene la respuesta enlatada más extrema de los 8 modelos: el mismo informe " +
+    "genérico de ‘corazón normal, sin hallazgos’ aparece en el 23.4% de " +
+    "todas sus respuestas GRG.",
+  "maira-2": "Único modelo inglés-only por diseño (no se le puede pedir " +
+    "español de forma nativa) y único con phrase grounding real (bounding boxes). " +
+    "Tiene la mayor tasa de respuestas únicas (75.5%) pero también un 66.8% de " +
+    "mezcla de idioma en GRG — la inyección de contexto en español lo " +
+    "desestabiliza en vez de traducirlo.",
+  "medgemma-27b": "Responde 100% en español, nunca rechaza, y tiene el mejor ROUGE-L " +
+    "(13.22%) de los 8. Pero tiene la mayor tasa de ‘plantilla’ (100%): sus " +
+    "informes siguen una estructura fija con encabezados en negrita " +
+    "(‘**Informe de Radiografía de...**’) que se repite casi textual en el " +
+    "17.1% de sus respuestas GRG.",
+  "medmo-8b": "El caso más extremo de colapso a etiquetas: solo " +
+    DATA.medmo_unique_pct + "% de sus respuestas son únicas. Su salida típica en AGRG-29 es " +
+    "una palabra sola (‘Consolidation’ aparece en el 7% de sus respuestas de esa " +
+    "tarea) y en GRG repite la misma oración de ‘vidrio esmerilado’ en el 77% " +
+    "de los casos — se comporta como clasificador, no como generador de informes.",
+  "qwen3.8-27b": "El modelo más equilibrado: mejor BLEU-4, Micro-F1, Macro-F1, " +
+    "precisión y recall de los 8, 0% de rechazo, y ~100% español consistente en " +
+    "las 29 regiones de AGRG-29 sin excepción. Su F1 por patología sigue siendo " +
+    "0 en varios hallazgos sutiles (fibrosis pulmonar, nodularidad), pero es el único " +
+    "modelo sin un patrón de falla dominante y obvio.",
+  "unirg-cxr-8b": "Nunca rechaza, pero hace code-switching: " + DATA.unirg_lang_mix.en + "% de sus " +
+    "informes GRG en español salen en inglés puro. En AGRG-29 el idioma de salida " +
+    "depende fuertemente de la región pedida (ver pestaña Tablas, comparación " +
+    "por región). Tiene la segunda mayor tasa de respuestas únicas (60.5%), así " +
+    "que al menos no colapsa a plantillas fijas.",
+};
+const CHARTS_MODELOS = MODELOS_ORDEN.map(m =>
+  [`fig7_f1_por_clase_${m}.png`, `F1 por clase — ${m}`, PERFILES[m] || ""]);
+
+function fillGrid(id, items){
+  document.getElementById(id).innerHTML = items.map(([file, cap, note]) => `
+    <figure class="card">
+      <img src="charts/${file}" alt="${cap}" loading="lazy">
+      <figcaption><strong>${cap}.</strong> ${note || ""}</figcaption>
+    </figure>`).join("");
+}
+fillGrid("grid-metricas", CHARTS_METRICAS);
+
+document.getElementById("grid-modelos").innerHTML = CHARTS_MODELOS.map(([file, cap, note], i) => `
+  <div class="model-block card">
+    <img src="charts/${file}" alt="${cap}" loading="lazy">
+    <div>
+      <div class="model-name">${MODELOS_ORDEN[i]}</div>
+      <h4>${cap.replace(/^F1 por clase . /, "")}</h4>
+      <p>${note}</p>
+    </div>
+  </div>`).join("");
+
+// --- stats on the Resumen tab ---
+document.getElementById("stat-row").innerHTML = [
+  ["8","modelos evaluados"], ["2","tareas (AGRG-29, GRG)"],
+  ["29","regiones anatómicas"], ["~17M","generaciones totales"],
+].map(([n,l]) => `<div class="stat"><div class="n">${n}</div><div class="label">${l}</div></div>`).join("");
+
+// --- resumen placeholders ---
+(function fillResumenPlaceholders(){
+  const H = DATA.headline_resultados;
+  const hl = DATA.heatmap_f1_highlights;
+  const eagleTop = DATA.eagle_top_refusal_regions, eagleBot = DATA.eagle_bottom_refusal_regions;
+  const unirg = DATA.unirg_lang_mix;
+  const comp = {}; DATA.tabla_composicion.rows.forEach(([k,v]) => comp[k]=v);
+  const vals = {
+    BLEU_BEST: H.bleu4.best_value, BLEU_MODEL: H.bleu4.best_model,
+    ROUGE_BEST: H.rougeL.best_value, ROUGE_MODEL: H.rougeL.best_model,
+    MICROF1_BEST: H.micro_f1.best_value, MACROF1_BEST: H.macro_f1.best_value,
+    MICROP_BEST: H.micro_P.best_value, MICROR_BEST: H.micro_R.best_value,
+    EAGLE_TOP0: eagleTop[0].region, EAGLE_TOP0_PCT: eagleTop[0].refusal_pct,
+    EAGLE_TOP1: eagleTop[1].region, EAGLE_TOP1_PCT: eagleTop[1].refusal_pct,
+    EAGLE_BOT0: eagleBot[eagleBot.length-1].region, EAGLE_BOT0_PCT: eagleBot[eagleBot.length-1].refusal_pct,
+    MEDMO_UNIQ: DATA.medmo_unique_pct,
+    UNIRG_EN: unirg.en,
+    UNIRG_MIXED_GRG: Math.round((100 - (100-unirg.en-unirg.mixed-unirg.es)) * 0 + (unirg.en+unirg.mixed)),
+    TOPF1_0: hl.top[0].f1 + "%", TOPF1_1: hl.top[1].f1 + "%", TOPF1_2: hl.top[2].f1 + "%",
+    ZEROF1_0: hl.zero_despite_common[0].label, ZEROF1_0_N: hl.zero_despite_common[0].n_pos,
+    ZEROF1_1: hl.zero_despite_common[1].label, ZEROF1_1_N: hl.zero_despite_common[1].n_pos,
+    ZEROF1_2: hl.zero_despite_common[2].label, ZEROF1_2_N: hl.zero_despite_common[2].n_pos,
+    N_COMUN: comp["Subconjunto común para métricas (BLEU/ROUGE/F1 clínico)"] || comp["Subconjunto común para métricas (BLEU/ROUGE/F1 clínico)"],
+    N_GRG: comp["Estudios evaluados (tarea GRG, informe completo)"],
+  };
+  let html = document.querySelector('section[data-tab="resumen"]').innerHTML;
+  for (const [k,v] of Object.entries(vals)){
+    html = html.split("__" + k + "__").join(String(v));
+  }
+  document.querySelector('section[data-tab="resumen"]').innerHTML = html;
+})();
+
+// --- Tablas tab: real HTML tables rendered from DATA ---
+function fmt(v){ return (v === null || v === undefined) ? "—" : v; }
+function markCls(m){ return m === "best" ? "cell-best" : (m === "second" ? "cell-second" : ""); }
+
+function renderTablaResultados(){
+  const t = DATA.tabla_resultados;
+  const thead = `<tr><th>Modelo</th>${t.columns.map(c=>`<th>${c}</th>`).join("")}</tr>`;
+  const rows = t.rows.map(r => `<tr><th scope="row">${r.model}</th>${
+    r.cells.map(c => `<td class="${markCls(c.mark)}">${fmt(c.v)}</td>`).join("")}</tr>`).join("");
+  return `
+    <h3 class="section-h">Tabla 1 &middot; Resultados generales</h3>
+    <div class="table-wrap"><table class="paper">
+      <caption>BLEU-4 y ROUGE-L contra el informe de referencia; % de rechazo sobre todas las
+        respuestas; F1/precisión/recall clínico (micro y macro) sobre 46 patologías
+        CheXpert-ES, subconjunto común de ${fmtN(DATA_N_COMUN())} estudios.</caption>
+      <thead>${thead}</thead><tbody>${rows}</tbody>
+    </table></div>
+    <p class="body-text">qwen3.8-27b es el único modelo que lidera 5 de las 7 columnas
+      a la vez (BLEU-4, Micro-F1, Macro-F1, Micro-P, Micro-R), sin rechazar nunca. medgemma-27b
+      le gana solo en ROUGE-L. Los modelos con 0% de rechazo marcado como ‘mejor’
+      están todos empatados en 0.0 — el único que realmente rechaza con
+      frecuencia es eagle2.5-8b (100%, no mostrado como empate porque no comparte el mínimo).
+      Notése que BLEU-4 y ROUGE-L altos no implican F1 clínico alto: medgemma-27b tiene
+      el mejor ROUGE-L pero solo el segundo mejor F1, lo que sugiere que su similitud léxica
+      incluye bastante texto de plantilla que no aporta contenido clínico verificable (ver
+      tasa de ‘% Plantilla’ en la Tabla 3).</p>`;
+}
+
+function renderTablaComposicion(){
+  const rows = DATA.tabla_composicion.rows.map(([k,v]) =>
+    `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+  return `
+    <h3 class="section-h">Tabla 2 &middot; Composición del dataset</h3>
+    <table class="kv">${rows}</table>
+    <p class="body-text">El subconjunto &ldquo;común&rdquo; usado para métricas
+      clínicas es considerablemente menor que el total evaluado por comportamiento,
+      porque exige que los 8 modelos hayan respondido algo no vacío para el mismo
+      estudio — así las comparaciones de F1/BLEU/ROUGE son siempre sobre exactamente
+      los mismos casos para los 8 modelos.</p>`;
+}
+
+function renderTablaComportamiento(){
+  const t = DATA.tabla_comportamiento;
+  const thead = `<tr><th>Modelo</th>${t.columns.map(c=>`<th>${c}</th>`).join("")}</tr>`;
+  const rows = t.rows.map(r => `<tr><th scope="row">${r.model}</th>${
+    r.cells.map(c => `<td class="${markCls(c.mark)}">${fmt(c.v)}</td>`).join("")}</tr>`).join("");
+  return `
+    <h3 class="section-h">Tabla 3 &middot; Comportamiento completo (GRG, español)</h3>
+    <div class="table-wrap"><table class="paper">
+      <caption>Clasificación de cada respuesta GRG en español por idioma de salida,
+        rechazo, plantilla fija y unicidad.</caption>
+      <thead>${thead}</thead><tbody>${rows}</tbody>
+    </table></div>
+    <p class="body-text">medgemma-27b y qwen3.8-27b son los únicos con 100% de respuestas en
+      español, pero solo medgemma-27b tiene 100% de ‘plantilla’ (estructura fija
+      con encabezados repetidos). maira-2 tiene la mayor tasa de respuestas únicas (75.5%)
+      pero también el mayor % mixto (66.8%): es original en palabras pero no en idioma.
+      unirg-cxr-8b sale 0% en español puro en GRG (todo mixto/inglés/indeterminado)
+      a pesar del prompt en español.</p>`;
+}
+
+function renderTablaRegion(){
+  const t = DATA.tabla_region;
+  const rows = t.rows.map(r => `<tr><td>${r.region}</td>
+    <td>${fmt(r.refusal_a)}</td><td>${fmt(r.refusal_b)}</td>
+    <td>${fmt(r.es_a)}</td><td>${fmt(r.es_b)}</td>
+    <td>${fmt(r.unique_a)}</td><td>${fmt(r.unique_b)}</td></tr>`).join("");
+  return `
+    <h3 class="section-h">Tabla 4 &middot; Comparación por región anatómica (AGRG-29)</h3>
+    <div class="table-wrap"><table class="paper">
+      <caption>${t.model_a} vs ${t.model_b}, las 29 regiones de AGRG-29, prompt en
+        español. A = ${t.model_a}, B = ${t.model_b}.</caption>
+      <thead><tr><th>Región</th><th>% Rechazo A</th><th>% Rechazo B</th>
+        <th>% Español A</th><th>% Español B</th>
+        <th>% Único A</th><th>% Único B</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <p class="body-text">qwen3.8-27b (A) mantiene ~100% español en las 29 regiones sin
+      excepción y 0% de rechazo. unirg-cxr-8b (B) nunca rechaza tampoco, pero su fidelidad
+      de idioma oscila muchísimo según la región: desde ~0.6% español en
+      &lsquo;abdomen&rsquo; hasta ~84.5% en &lsquo;columna vertebral&rsquo;. B tiene además
+      consistentemente más respuestas únicas por región que A (A ronda 5&ndash;16%,
+      B 34&ndash;84%) &mdash; A es más fiel al idioma pero más repetitivo; B es más
+      variado en texto pero menos fiel al idioma pedido.</p>`;
+}
+
+function renderTablaEnlatadas(){
+  const rows = DATA.tabla_enlatadas.rows.map(r => `<tr>
+    <td>${r.model}</td><td>${r.task.toUpperCase()}</td><td>${r.share}%</td>
+    <td class="canned-text">
+      <span class="preview">${escapeHtml(r.text.slice(0,70))}${r.text.length>70?"…":""}</span>
+      ${r.text.length>70 ? `<button class="more-btn" type="button">ver completo</button>
+      <span class="full">${escapeHtml(r.text)}</span>` : ""}
+    </td></tr>`).join("");
+  return `
+    <h3 class="section-h">Tabla 5 &middot; Respuesta más repetida por modelo y tarea</h3>
+    <div class="table-wrap"><table class="paper" style="font-variant-numeric:normal">
+      <caption>La respuesta exacta más frecuente de cada modelo, por tarea, y qué
+        porcentaje de sus respuestas totales en esa tarea es exactamente ese texto (prompt en
+        español).</caption>
+      <thead><tr><th>Modelo</th><th>Tarea</th><th>% de sus respuestas</th><th>Texto</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <p class="body-text">medmo-8b repite la misma oración de &lsquo;vidrio esmerilado&rsquo;
+      en el 77% de sus informes GRG — la tasa de repetición más alta de los 8
+      modelos en cualquier tarea. lingshu-7b (23.4%) y unirg-cxr-8b (20%) también repiten
+      una única plantilla genérica en 1 de cada 5 informes GRG aproximadamente.
+      eagle2.5-8b es el único cuya respuesta más repetida en ambas tareas es
+      literalmente un rechazo.</p>`;
+}
+
+function fmtN(n){ return String(n); }
+function DATA_N_COMUN(){
+  const row = DATA.tabla_composicion.rows.find(r => r[0].includes("común") || r[0].includes("comun"));
+  return row ? row[1] : "";
+}
+
+document.getElementById("tablas-wrap").innerHTML =
+  renderTablaResultados() + renderTablaComposicion() + renderTablaComportamiento() +
+  renderTablaRegion() + renderTablaEnlatadas();
+
+document.querySelectorAll(".more-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const full = btn.nextElementSibling;
+    const preview = btn.previousElementSibling;
+    const showing = full.style.display === "inline";
+    full.style.display = showing ? "none" : "inline";
+    preview.style.display = showing ? "inline" : "none";
+    btn.textContent = showing ? "ver completo" : "ver menos";
+  });
+});
+
+// --- tabs ---
+const TABS = [["resumen","Resumen"],["metricas","Métricas"],["modelos","Por modelo"],
+  ["tablas","Tablas"],["generaciones","Generaciones"]];
+const tabNav = document.querySelector("nav.tabs");
+tabNav.innerHTML = TABS.map(([id,label],i) =>
+  `<button role="tab" data-tab="${id}" aria-selected="${i===0}">${label}</button>`).join("");
+function selectTab(id){
+  document.querySelectorAll("section.tab").forEach(s => s.hidden = s.dataset.tab !== id);
+  document.querySelectorAll("nav.tabs button").forEach(b =>
+    b.setAttribute("aria-selected", String(b.dataset.tab === id)));
+  try{ location.hash = id; }catch(e){}
+}
+tabNav.addEventListener("click", e => {
+  const b = e.target.closest("button[data-tab]");
+  if (b) selectTab(b.dataset.tab);
+});
+const startTab = TABS.map(t=>t[0]).includes(location.hash.slice(1)) ? location.hash.slice(1) : "resumen";
+selectTab(startTab);
+
+// --- generations browser ---
+const CONDS = {es:"español", en:"inglés", mixed:"mixto", indet:"indeterminado",
+  refusal:"rechazo", label:"colapso a etiqueta"};
+
+function uniqueSorted(key){
+  return [...new Set(SAMPLES.map(r => r[key]))].sort();
+}
+function fillSelect(sel, values, labelFn){
+  for (const v of values){
+    const opt = document.createElement("option");
+    opt.value = v; opt.textContent = labelFn ? labelFn(v) : v;
+    sel.appendChild(opt);
+  }
+}
+const fModel = document.getElementById("f-model");
+const fTask = document.getElementById("f-task");
+const fCond = document.getElementById("f-cond");
+const fSearch = document.getElementById("f-search");
+fillSelect(fModel, uniqueSorted("model"));
+fillSelect(fTask, uniqueSorted("task"));
+fillSelect(fCond, uniqueSorted("cond"), c => CONDS[c] || c);
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;"}[c]));
+}
+function renderSamples(){
+  const m = fModel.value, t = fTask.value, c = fCond.value;
+  const q = fSearch.value.trim().toLowerCase();
+  const rows = SAMPLES.filter(r =>
+    (!m || r.model === m) && (!t || r.task === t) && (!c || r.cond === c) &&
+    (!q || r.region.toLowerCase().includes(q) || r.text.toLowerCase().includes(q)));
+  document.getElementById("gen-count").textContent =
+    `${rows.length} de ${SAMPLES.length}`;
+  const body = document.getElementById("gen-body");
+  if (!rows.length){
+    body.innerHTML = `<tr><td colspan="5" class="empty">Sin resultados para este filtro.</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(r => `
+    <tr class="gen-row">
+      <td class="gen-meta">${escapeHtml(r.model)}</td>
+      <td class="gen-meta">${escapeHtml(r.task)}</td>
+      <td class="gen-meta">${escapeHtml(r.region)}</td>
+      <td><span class="pill ${escapeHtml(r.cond)}">${escapeHtml(CONDS[r.cond] || r.cond)}</span></td>
+      <td class="gen-text">${escapeHtml(r.text)}</td>
+    </tr>`).join("");
+}
+[fModel, fTask, fCond].forEach(el => el.addEventListener("change", renderSamples));
+fSearch.addEventListener("input", renderSamples);
+renderSamples();
+</script>
